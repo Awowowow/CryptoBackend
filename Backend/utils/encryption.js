@@ -3,7 +3,7 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 
 const getEncryptionKey = () =>{
-  const rawKey = process.env.TWO_FA_ENCRYPTION_KEY;
+  const rawKey = process.env.TWO_FA_ENCRYPTED_KEY;
     if(!rawKey){
         throw new Error("TWO_FA_ENCRYPTION_KEY is not configured");
     }

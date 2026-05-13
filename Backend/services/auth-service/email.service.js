@@ -32,4 +32,22 @@ const sendVerificationEmail = async (email, token) => {
   });
 };
 
-export { sendVerificationEmail };
+const sendPasswordResetEmail = async (email, token) => {
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+  await transporter.sendMail({
+    from: `"Crypto App" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: "Reset your password",
+    html: `
+      <h2>Password Reset</h2>
+      <p>Click below to reset your password:</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>This link expires in 15 minutes.</p>
+      <p>If you did not request this, you can safely ignore this email.</p>
+    `,
+  });
+};
+
+
+export { sendVerificationEmail,sendPasswordResetEmail };

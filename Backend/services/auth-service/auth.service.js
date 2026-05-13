@@ -4,7 +4,7 @@ import AppError from "../../utils/AppError.js";
 import prisma from "../../config/prisma.js";
 import hashToken from "../../utils/hashToken.js";
 import generateRandomToken from "../../utils/tokenGenrator.js";
-import { sendVerificationEmail } from "./email.service.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.service.js";
 import { createTwoFaToken } from "../twofa-service/twofaToken.service.js";
 import { verifyTrustedDevice } from "../twofa-service/trustedDevice.service.js";
 import { createAuthSession,refreshAuthSession,revokeAuthSession } from "./session.service.js";
@@ -146,10 +146,77 @@ const refreshUserToken = async (refreshToken) => {
   return refreshAuthSession(refreshToken);
 };
 
+const requestPasswordReset = async ({ email }) => {
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    return;
+  }
+
+  await prisma.authToken.deleteMany({
+    where: {
+      userId: user.id,
+      type: "PASSWORD_RESET",
+    },
+  });
+
+  const rawToken = generateRandomToken();
+  const tokenHash = hashToken(rawToken);
+
+  await prisma.authToken.create({
+    data: {
+      userId: user.id,
+      type: "PASSWORD_RESET",
+      tokenHash,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 15),
+    },
+  });
+
+  await sendPasswordResetEmail(user.email, rawToken);
+};
+
+const resetUserPassowrd = async({token, newPassword}) =>{
+  const tokenHash = await hashToken(token);
+
+  const storedToken = await prisma.authToken.findFirst({
+    where:{
+      tokenHash,
+      type: "PASSWORD_RESET",
+      usedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+    include: {
+      user: true,
+    },
+  })
+
+  if (!storedToken) throw new AppError("Invalid or expired token", 400)
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+  await prisma.user.update({
+    where: { id: storedToken.userId },
+    data: {
+      passwordHash: hashedPassword,
+    },
+  });
+
+  await prisma.authToken.deleteMany({
+    where: {
+      userId: storedToken.userId,
+      type: "PASSWORD_RESET",
+    },
+  });
+}
+
 const logoutUser = async(refreshToken) =>{
   await revokeAuthSession(refreshToken);
 }
 
-export { signupUser, loginUser, refreshUserToken,verifyEmailToken,logoutUser };
+export { signupUser, loginUser, refreshUserToken,verifyEmailToken,logoutUser,requestPasswordReset,resetUserPassowrd };
 
 

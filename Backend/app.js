@@ -10,6 +10,12 @@ const app = express();
 import "./services/auth-service/email.service.js"
 
 app.use(cookieParser());
+app.use(
+    cors({
+      origin: 'http://localhost:5173',
+      credentials: true,
+    })
+  )
 app.use((req, res, next) => {
     console.log("👉 Incoming request:", req.method, req.url);
     next();
