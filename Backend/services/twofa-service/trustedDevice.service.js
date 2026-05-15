@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import AppError from "../../utils/AppError.js";
 import hashToken from "../../utils/hashToken.js";
 import generateRandomToken from "../../utils/tokenGenrator.js";
 
@@ -57,7 +58,56 @@ const verifyTrustedDevice = async({userId, trustedDeviceToken}) =>{
     return true
 }
 
+const listTrustedDevice = async({userId}) =>{
+    const trustedDevices = await prisma.trustedDevice.findMany({
+        where:{
+            userId,
+            revokedAt: null,
+            expiresAt: {
+                gt: new Date(),
+            },
+        },
+        orderBy:{
+            createdAt: 'desc',
+        },
+        select: {
+            id: true,
+            userAgent: true,
+            ipAddress: true,
+            createdAt: true,
+            lastUsedAt: true,
+            expiresAt: true,
+        }
+    });
+
+    return trustedDevices;
+}
+
+const revokeTrustedDevice = async({userId, trustedDeviceId}) =>{
+    const trustedDevice = await prisma.trustedDevice.findFirst({
+        where:{
+            id: trustedDeviceId,
+            userId,
+            revokedAt: null,
+        }
+    });
+    if (!trustedDevice){
+        throw new AppError("Trusted device not found", 404);
+    }
+
+    await prisma.trustedDevice.update({
+        where: {
+            id: trustedDevice.id,
+        },
+        data:{
+            revokedAt: new Date(),
+        }
+    });
+}
+
 export {
     createTrustedDevice,
     verifyTrustedDevice,
+    listTrustedDevice,
+    revokeTrustedDevice
   };

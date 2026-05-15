@@ -1,3 +1,4 @@
+import { listTrustedDevice, revokeTrustedDevice } from "../services/twofa-service/trustedDevice.service.js";
 import { setupTwoFa, verifyTwoFaSetup} from "../services/twofa-service/twofa.service.js";
 import { verifyTwoFaLogin, verifyRecentTwoFa } from "../services/twofa-service/twoFaLogin.service.js";
 import asyncWrapper from "../utils/asyncWrapper.js";
@@ -85,10 +86,36 @@ const verifyRecent = asyncWrapper(async(req,res) =>{
   });
 });
 
+const getTrustedDevices = asyncWrapper(async(req,res) =>{
+  const userId = req.user.userId;
+
+  const trustedDevices = await listTrustedDevice({userId});
+
+  res.status(200).json({
+    success: true,
+    message: "Trusted devices fetched successfully",
+    data: trustedDevices,
+  });
+})
+
+const deleteTrustedDevice = asyncWrapper(async(req,res) =>{
+  const userId = req.user.userId;
+  const trustedDeviceId = req.params.trustedDeviceId;
+
+  await revokeTrustedDevice({userId, trustedDeviceId});
+
+  res.status(200).json({
+    success: true,
+    message: "Trusted device revoked successfully",
+  });
+})
+
 export {
     setup,
     verifySetup,
     verifyLogin,
-    verifyRecent
+    verifyRecent,
+    getTrustedDevices,
+    deleteTrustedDevice
   };
 

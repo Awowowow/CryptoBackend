@@ -26,6 +26,19 @@ enum TokenType {
   TWO_FA_TEMP
 }
 
+enum KycDocumentType {
+  PASSPORT
+  NATIONAL_ID
+  DRIVING_LICENSE
+}
+
+enum KycFileType {
+  ID_FRONT
+  ID_BACK
+  PROOF_OF_ADDRESS
+  SELFIE
+}
+
 
 model User {
   id               String         @id @default(cuid())
@@ -52,6 +65,9 @@ model User {
   sessions         Session[]
   authTokens       AuthToken[]
   loginAttempts    LoginAttempt[]
+  kycSubmissions   KycSubmission[]
+  reviewedKycSubmissions  KycSubmission[] @relation("KycReviewedBy")
+  kycAuditLogs            KycAuditLog[]   @relation("KycAuditActor")
 }
 
 model TrustedDevice {
@@ -89,7 +105,6 @@ model TwoFaSecret {
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-
 model Session {
   id               String    @id @default(cuid())
   userId           String
@@ -114,7 +129,6 @@ model Session {
   @@index([expiresAt])
 }
 
-
 model AuthToken {
   id               String    @id @default(cuid())
   userId           String
@@ -133,7 +147,6 @@ model AuthToken {
   @@index([expiresAt])
   @@index([tokenHash, type])
 }
-
 
 model LoginAttempt {
   id               String    @id @default(cuid())
@@ -155,4 +168,82 @@ model LoginAttempt {
 
   @@index([email, createdAt])
   @@index([userId, createdAt])
+}
+
+model KycSubmission {
+  id              String          @id @default(cuid())
+  userId          String
+
+  status          KycStatus       @default(PENDING)
+
+  legalFirstName  String          @db.VarChar(120)
+  legalLastName   String          @db.VarChar(120)
+  dateOfBirth     DateTime
+
+  country         String          @db.VarChar(80)
+  addressLine1    String          @db.VarChar(255)
+  addressLine2    String?         @db.VarChar(255)
+  city            String          @db.VarChar(120)
+  postalCode      String          @db.VarChar(40)
+
+  documentType    KycDocumentType
+  documentNumber  String?         @db.VarChar(120)
+
+  rejectionReason String?         @db.Text
+
+  submittedAt     DateTime        @default(now())
+  reviewedAt      DateTime?
+  reviewedByUserId  String?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy      User?           @relation("KycReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  documents       KycDocument[]
+  auditLogs       KycAuditLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([submittedAt])
+  @@index([reviewedByUserId])
+}
+
+model KycDocument {
+  id              String        @id @default(cuid())
+  submissionId    String
+
+  fileType        KycFileType
+  fileName        String        @db.VarChar(255)
+  filePath        String        @db.Text
+  mimeType        String        @db.VarChar(120)
+  fileSize        Int
+
+  createdAt       DateTime      @default(now())
+
+  submission      KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, fileType])
+  @@index([submissionId])
+  @@index([fileType])
+}
+
+model KycAuditLog {
+  id             String         @id @default(cuid())
+  submissionId   String
+  actorUserId    String?
+
+  action         String         @db.VarChar(80)
+  fromStatus     KycStatus?
+  toStatus       KycStatus?
+  reason         String?        @db.Text
+
+  createdAt      DateTime       @default(now())
+
+  submission     KycSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  actor          User?          @relation("KycAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([actorUserId])
+  @@index([createdAt])
 }

@@ -2,12 +2,15 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import errorHandler from './middleware/errorHandler.js';
-import AppError from './utils/AppError.js';
 import redisClient from './config/redis.js';
 import authRouter from './router/auth.js'; 
 import cookieParser from "cookie-parser";
 const app = express();
 import "./services/auth-service/email.service.js"
+import userRouter from './router/user.js';
+import AppError from './utils/appError.js';
+import { kycRouter } from './router/kyc.js';
+import adminRouter from './router/admin.js';
 
 app.use(cookieParser());
 app.use(
@@ -26,6 +29,10 @@ app.use(express.json());
 
 
 app.use('/auth', authRouter);
+app.use("/user", userRouter)
+app.use("/kyc", kycRouter)
+app.use("/admin", adminRouter)
+
 
 app.use((_req, _res, next) => {
     next(new AppError('Route not found', 404));

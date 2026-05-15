@@ -4,4 +4,4 @@ const asyncWrapper = (fn) => {
     };
   };
   
-  export default asyncWrapper;
+export default asyncWrapper;
