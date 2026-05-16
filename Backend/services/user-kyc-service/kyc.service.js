@@ -381,10 +381,95 @@ const uploadKycDocumentForSubmission = async ({
   return document;
 };
 
+const getKycSubmissionForAdmin = async (submissionId) => {
+  const submission = await prisma.kycSubmission.findUnique({
+    where: {
+      id: submissionId,
+    },
+    select: {
+      id: true,
+      status: true,
+      legalFirstName: true,
+      legalLastName: true,
+      dateOfBirth: true,
+      country: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      postalCode: true,
+      documentType: true,
+      documentNumber: true,
+      rejectionReason: true,
+      submittedAt: true,
+      reviewedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          kycStatus: true,
+          isEmailVerified: true,
+          isTwoFaEnabled: true,
+        },
+      },
+      reviewedBy: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
+      documents: {
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+          fileType: true,
+          fileName: true,
+          filePath: true,
+          mimeType: true,
+          fileSize: true,
+          createdAt: true,
+        },
+      },
+      auditLogs: {
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+          action: true,
+          fromStatus: true,
+          toStatus: true,
+          reason: true,
+          createdAt: true,
+          actor: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!submission) {
+    throw new AppError("KYC submission not found", 404);
+  }
+
+  return submission;
+};
+
 export {
   getKycStatus,
   listKycSubmissionsForAdmin,
   reviewKycSubmission,
   submitKyc,
   uploadKycDocumentForSubmission,
+  getKycSubmissionForAdmin,
 };

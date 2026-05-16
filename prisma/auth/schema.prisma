@@ -39,6 +39,70 @@ enum KycFileType {
   SELFIE
 }
 
+enum WalletOwnerType {
+  USER
+  SYSTEM
+}
+
+enum WalletAccountType {
+  AVAILABLE
+  LOCKED
+  CUSTODY
+  FEE_REVENUE
+}
+
+enum LedgerTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  FUNDS_LOCK
+  FUNDS_UNLOCK
+  TRADE_SETTLEMENT
+  FEE_COLLECTION
+  ADMIN_ADJUSTMENT
+}
+
+
+
+
+model Asset {
+  id          String   @id @default(cuid())
+  symbol      String   @unique @db.VarChar(20)
+  name        String   @db.VarChar(120)
+  decimals    Int
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  walletAccounts    WalletAccount[]
+  ledgerEntries     LedgerEntry[]
+}
+
+model WalletAccount {
+  id               String            @id @default(cuid())
+  userId           String?
+  assetId          String
+
+  ownerType        WalletOwnerType
+  type             WalletAccountType
+  systemAccountKey String?           @db.VarChar(120)
+  label            String?           @db.VarChar(120)
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset            Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  balance          WalletBalance?
+  ledgerEntries    LedgerEntry[]
+
+  @@unique([userId, assetId, type])
+  @@unique([systemAccountKey, assetId, type])
+  @@index([assetId])
+  @@index([ownerType, type])
+}
+
 
 model User {
   id               String         @id @default(cuid())
@@ -66,6 +130,7 @@ model User {
   authTokens       AuthToken[]
   loginAttempts    LoginAttempt[]
   kycSubmissions   KycSubmission[]
+  walletAccounts   WalletAccount[]
   reviewedKycSubmissions  KycSubmission[] @relation("KycReviewedBy")
   kycAuditLogs            KycAuditLog[]   @relation("KycAuditActor")
 }
@@ -245,5 +310,58 @@ model KycAuditLog {
 
   @@index([submissionId])
   @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model WalletBalance {
+  id              String        @id @default(cuid())
+  walletAccountId String        @unique
+
+  balance         Decimal       @default(0) @db.Decimal(36, 18)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  walletAccount   WalletAccount @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
+}
+
+
+model LedgerTransaction {
+  id              String                @id @default(cuid())
+
+  type            LedgerTransactionType
+  idempotencyKey  String                @unique @db.VarChar(180)
+
+  referenceType   String?               @db.VarChar(80)
+  referenceId     String?               @db.VarChar(180)
+  description     String?               @db.Text
+
+  createdAt       DateTime              @default(now())
+
+  entries         LedgerEntry[]
+
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+}
+
+
+model LedgerEntry {
+  id                    String            @id @default(cuid())
+  ledgerTransactionId   String
+  walletAccountId       String
+  assetId               String
+
+  amount                Decimal           @db.Decimal(36, 18)
+
+  createdAt             DateTime          @default(now())
+
+  ledgerTransaction     LedgerTransaction @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  walletAccount         WalletAccount     @relation(fields: [walletAccountId], references: [id], onDelete: Restrict)
+  asset                 Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([ledgerTransactionId])
+  @@index([walletAccountId])
+  @@index([assetId])
   @@index([createdAt])
 }

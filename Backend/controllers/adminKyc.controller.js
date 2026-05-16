@@ -1,4 +1,5 @@
 import {
+  getKycSubmissionForAdmin,
     listKycSubmissionsForAdmin,
     reviewKycSubmission,
   } from "../services/user-kyc-service/kyc.service.js";
@@ -43,8 +44,21 @@ const reviewKycApplication = asyncWrapper(async (req, res) => {
       data: submission,
     });
   });
+
+const getKycSubmissionDetailsForAdmin = asyncWrapper(async (req, res) => {
+    const { submissionId } = req.params;
+  
+    const submission = await getKycSubmissionForAdmin(submissionId);
+  
+    res.status(200).json({
+      success: true,
+      message: "KYC submission details fetched successfully",
+      data: submission,
+    });
+  });
   
   export {
     getKycSubmissionsForAdmin,
     reviewKycApplication,
+    getKycSubmissionDetailsForAdmin,
   };
