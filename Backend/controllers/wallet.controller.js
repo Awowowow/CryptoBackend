@@ -23,11 +23,11 @@ const getDepositAddress = asyncWrapper(async (req,res) =>{
         assetSymbol
     });
 
-    req.status(200).json({
+    res.status(200).json({
         success: true,
         message: "Deposit address fetched successfully",
         data: depositAddress,
     })
 })
 
-export {getWalletBalance}
+export {getWalletBalance,getDepositAddress}
