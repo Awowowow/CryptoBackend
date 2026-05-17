@@ -7,6 +7,26 @@ const generateDevelopmentDepositAddress = ({ assetSymbol, userId }) => {
   return `dev_${assetSymbol.toLowerCase()}_${userId}_${randomSuffix}`;
 };
 
+const formatDepositAddress = (depositAddress) => {
+    return {
+      id: depositAddress.id,
+      address: depositAddress.address,
+      memo: depositAddress.memo,
+      asset: {
+        id: depositAddress.assetNetwork.asset.id,
+        symbol: depositAddress.assetNetwork.asset.symbol,
+        name: depositAddress.assetNetwork.asset.name,
+        decimals: depositAddress.assetNetwork.asset.decimals,
+      },
+      network: {
+        id: depositAddress.assetNetwork.network.id,
+        code: depositAddress.assetNetwork.network.code,
+        name: depositAddress.assetNetwork.network.name,
+      },
+      createdAt: depositAddress.createdAt,
+    };
+  };
+
 const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
     const normalizedAssetSymbol = assetSymbol.trim().toUpperCase();
   
@@ -60,7 +80,7 @@ const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
       },
     });
   
-    return depositAddress;
+    return formatDepositAddress(depositAddress);
   };
 
 export {

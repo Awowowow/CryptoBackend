@@ -187,7 +187,7 @@ model Deposit {
   depositAddressId String
 
   txHash      String @db.VarChar(255)
-  outputIndex Int?
+  eventIndex Int @default(0)
 
   amount Decimal @db.Decimal(36, 18)
 
@@ -206,7 +206,7 @@ model Deposit {
   network        BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
   depositAddress DepositAddress    @relation(fields: [depositAddressId], references: [id], onDelete: Restrict)
 
-  @@unique([networkId, txHash, outputIndex])
+  @@unique([networkId, txHash, eventIndex])
   @@index([userId])
   @@index([assetNetworkId])
   @@index([networkId])
