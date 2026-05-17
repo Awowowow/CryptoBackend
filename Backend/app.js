@@ -11,6 +11,7 @@ import userRouter from './router/user.js';
 import AppError from './utils/appError.js';
 import { kycRouter } from './router/kyc.js';
 import adminRouter from './router/admin.js';
+import walletRouter from './router/wallet.js';
 
 app.use(cookieParser());
 app.use(
@@ -32,7 +33,7 @@ app.use('/auth', authRouter);
 app.use("/user", userRouter)
 app.use("/kyc", kycRouter)
 app.use("/admin", adminRouter)
-
+app.use("/wallet", walletRouter)
 
 app.use((_req, _res, next) => {
     next(new AppError('Route not found', 404));

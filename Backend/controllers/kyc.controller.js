@@ -21,7 +21,7 @@ const submitKycApplication = asyncWrapper(async (req, res) => {
 const getMyKycStatus = asyncWrapper(async(req,res)=>{
     const userId = req.user.userId;
 
-    const submission = await getKycStatus({userId});
+    const submission = await getKycStatus(userId);
 
     res.status(200).json({
         success: true,
@@ -48,4 +48,4 @@ const uploadMyKycDocument = asyncWrapper(async(req,res)=>{
     });
 })
 
-export {submitKycApplication, getMyKycStatus , uploadMyKycDocument}
+export {submitKycApplication, getMyKycStatus , uploadMyKycDocument} 

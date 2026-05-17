@@ -6,7 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 enum UserRole {
   USER
   ADMIN
@@ -61,41 +60,89 @@ enum LedgerTransactionType {
   ADMIN_ADJUSTMENT
 }
 
-
-
+enum DepositStatus {
+  DETECTED
+  CONFIRMING
+  CONFIRMED
+  CREDITED
+  REJECTED
+}
 
 model Asset {
-  id          String   @id @default(cuid())
-  symbol      String   @unique @db.VarChar(20)
-  name        String   @db.VarChar(120)
-  decimals    Int
-  isActive    Boolean  @default(true)
+  id       String  @id @default(cuid())
+  symbol   String  @unique @db.VarChar(20)
+  name     String  @db.VarChar(120)
+  decimals Int
+  isActive Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  walletAccounts    WalletAccount[]
-  ledgerEntries     LedgerEntry[]
+  walletAccounts WalletAccount[]
+  ledgerEntries  LedgerEntry[]
+  assetNetworks  AssetNetwork[]
+}
+
+model BlockchainNetwork {
+  id String @id @default(cuid())
+
+  code String @unique @db.VarChar(40)
+  name String @db.VarChar(120)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assetNetworks    AssetNetwork[]
+  depositAddresses DepositAddress[]
+  deposits         Deposit[]
+}
+
+model AssetNetwork {
+  id String @id @default(cuid())
+
+  assetId   String
+  networkId String
+
+  depositEnabled    Boolean @default(true)
+  withdrawalEnabled Boolean @default(true)
+
+  minConfirmations Int @default(1)
+
+  contractAddress String? @db.VarChar(255)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asset   Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  network BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
+
+  depositAddresses DepositAddress[]
+  deposits         Deposit[]
+
+  @@unique([assetId, networkId])
+  @@index([networkId])
 }
 
 model WalletAccount {
-  id               String            @id @default(cuid())
-  userId           String?
-  assetId          String
+  id      String  @id @default(cuid())
+  userId  String?
+  assetId String
 
   ownerType        WalletOwnerType
   type             WalletAccountType
   systemAccountKey String?           @db.VarChar(120)
   label            String?           @db.VarChar(120)
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asset            Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
 
-  balance          WalletBalance?
-  ledgerEntries    LedgerEntry[]
+  balance       WalletBalance?
+  ledgerEntries LedgerEntry[]
 
   @@unique([userId, assetId, type])
   @@unique([systemAccountKey, assetId, type])
@@ -103,110 +150,175 @@ model WalletAccount {
   @@index([ownerType, type])
 }
 
+model DepositAddress {
+  id String @id @default(cuid())
+
+  userId         String
+  assetNetworkId String
+  networkId      String
+
+  address String  @db.VarChar(255)
+  memo    String? @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetNetwork AssetNetwork      @relation(fields: [assetNetworkId], references: [id], onDelete: Restrict)
+  network      BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
+
+  deposits Deposit[]
+
+  @@unique([userId, assetNetworkId])
+  @@unique([networkId, address, memo])
+  @@index([userId])
+  @@index([assetNetworkId])
+  @@index([networkId])
+}
+
+model Deposit {
+  id String @id @default(cuid())
+
+  userId           String
+  assetNetworkId   String
+  networkId        String
+  depositAddressId String
+
+  txHash      String @db.VarChar(255)
+  outputIndex Int?
+
+  amount Decimal @db.Decimal(36, 18)
+
+  status        DepositStatus @default(DETECTED)
+  confirmations Int           @default(0)
+
+  detectedAt  DateTime  @default(now())
+  confirmedAt DateTime?
+  creditedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetNetwork   AssetNetwork      @relation(fields: [assetNetworkId], references: [id], onDelete: Restrict)
+  network        BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
+  depositAddress DepositAddress    @relation(fields: [depositAddressId], references: [id], onDelete: Restrict)
+
+  @@unique([networkId, txHash, outputIndex])
+  @@index([userId])
+  @@index([assetNetworkId])
+  @@index([networkId])
+  @@index([depositAddressId])
+  @@index([status])
+}
 
 model User {
-  id               String         @id @default(cuid())
-  email            String         @unique @db.VarChar(255)
-  passwordHash     String         @db.VarChar(255)
+  id           String @id @default(cuid())
+  email        String @unique @db.VarChar(255)
+  passwordHash String @db.VarChar(255)
 
-  role             UserRole       @default(USER)
+  role UserRole @default(USER)
 
-  isEmailVerified  Boolean        @default(false)
-  emailVerifiedAt  DateTime?
+  isEmailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime?
 
-  isTwoFaEnabled   Boolean        @default(false)
+  isTwoFaEnabled Boolean @default(false)
 
-  kycStatus        KycStatus      @default(NOT_SUBMITTED)
+  kycStatus KycStatus @default(NOT_SUBMITTED)
 
-  lastLoginAt      DateTime?
+  lastLoginAt DateTime?
 
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  trustedDevices TrustedDevice[]
-  twoFaSecret      TwoFaSecret?
-  sessions         Session[]
-  authTokens       AuthToken[]
-  loginAttempts    LoginAttempt[]
-  kycSubmissions   KycSubmission[]
-  walletAccounts   WalletAccount[]
-  reviewedKycSubmissions  KycSubmission[] @relation("KycReviewedBy")
-  kycAuditLogs            KycAuditLog[]   @relation("KycAuditActor")
+  trustedDevices         TrustedDevice[]
+  twoFaSecret            TwoFaSecret?
+  sessions               Session[]
+  authTokens             AuthToken[]
+  loginAttempts          LoginAttempt[]
+  kycSubmissions         KycSubmission[]
+  walletAccounts         WalletAccount[]
+  depositAddresses       DepositAddress[]
+  deposits               Deposit[]
+  reviewedKycSubmissions KycSubmission[]  @relation("KycReviewedBy")
+  kycAuditLogs           KycAuditLog[]    @relation("KycAuditActor")
 }
 
 model TrustedDevice {
-  id          String    @id @default(cuid())
-  userId      String
+  id     String @id @default(cuid())
+  userId String
 
-  tokenHash   String    @unique @db.VarChar(255)
-  userAgent   String?   @db.Text
-  ipAddress   String?   @db.VarChar(64)
+  tokenHash String  @unique @db.VarChar(255)
+  userAgent String? @db.Text
+  ipAddress String? @db.VarChar(64)
 
-  expiresAt   DateTime
-  revokedAt   DateTime?
+  expiresAt DateTime
+  revokedAt DateTime?
 
-  createdAt   DateTime  @default(now())
-  lastUsedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model TwoFaSecret {
-  id               String    @id @default(cuid())
-  userId           String    @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
-  secretEncrypted  String    @db.Text
-  backupCodesHash  String[]
+  secretEncrypted String   @db.Text
+  backupCodesHash String[]
 
-  isVerified       Boolean   @default(false)
+  isVerified Boolean @default(false)
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Session {
-  id               String    @id @default(cuid())
-  userId           String
+  id     String @id @default(cuid())
+  userId String
 
-  refreshTokenHash String    @unique @db.VarChar(255)
+  refreshTokenHash String @unique @db.VarChar(255)
 
-  userAgent        String?   @db.Text
-  ipAddress        String?   @db.VarChar(64)
-  deviceName       String?   @db.VarChar(120)
-  location         String?   @db.VarChar(120)
+  userAgent  String? @db.Text
+  ipAddress  String? @db.VarChar(64)
+  deviceName String? @db.VarChar(120)
+  location   String? @db.VarChar(120)
 
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  lastActivityAt   DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  lastActivityAt DateTime?
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model AuthToken {
-  id               String    @id @default(cuid())
-  userId           String
+  id     String @id @default(cuid())
+  userId String
 
-  type             TokenType
-  tokenHash        String    @unique @db.VarChar(255)
+  type      TokenType
+  tokenHash String    @unique @db.VarChar(255)
 
-  expiresAt        DateTime
-  usedAt           DateTime?
+  expiresAt DateTime
+  usedAt    DateTime?
 
-  createdAt        DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
   @@index([expiresAt])
@@ -214,59 +326,59 @@ model AuthToken {
 }
 
 model LoginAttempt {
-  id               String    @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId           String?
-  email            String    @db.VarChar(255)
+  userId String?
+  email  String  @db.VarChar(255)
 
-  ipAddress        String?   @db.VarChar(64)
-  userAgent        String?   @db.Text
+  ipAddress String? @db.VarChar(64)
+  userAgent String? @db.Text
 
-  success          Boolean
-  reason           String?   @db.VarChar(120)
+  success Boolean
+  reason  String? @db.VarChar(120)
 
-  isBlocked        Boolean   @default(false)
+  isBlocked Boolean @default(false)
 
-  createdAt        DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([email, createdAt])
   @@index([userId, createdAt])
 }
 
 model KycSubmission {
-  id              String          @id @default(cuid())
-  userId          String
+  id     String @id @default(cuid())
+  userId String
 
-  status          KycStatus       @default(PENDING)
+  status KycStatus @default(PENDING)
 
-  legalFirstName  String          @db.VarChar(120)
-  legalLastName   String          @db.VarChar(120)
-  dateOfBirth     DateTime
+  legalFirstName String   @db.VarChar(120)
+  legalLastName  String   @db.VarChar(120)
+  dateOfBirth    DateTime
 
-  country         String          @db.VarChar(80)
-  addressLine1    String          @db.VarChar(255)
-  addressLine2    String?         @db.VarChar(255)
-  city            String          @db.VarChar(120)
-  postalCode      String          @db.VarChar(40)
+  country      String  @db.VarChar(80)
+  addressLine1 String  @db.VarChar(255)
+  addressLine2 String? @db.VarChar(255)
+  city         String  @db.VarChar(120)
+  postalCode   String  @db.VarChar(40)
 
-  documentType    KycDocumentType
-  documentNumber  String?         @db.VarChar(120)
+  documentType   KycDocumentType
+  documentNumber String?         @db.VarChar(120)
 
-  rejectionReason String?         @db.Text
+  rejectionReason String? @db.Text
 
-  submittedAt     DateTime        @default(now())
-  reviewedAt      DateTime?
-  reviewedByUserId  String?
+  submittedAt      DateTime  @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy      User?           @relation("KycReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  documents       KycDocument[]
-  auditLogs       KycAuditLog[]
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?         @relation("KycReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  documents  KycDocument[]
+  auditLogs  KycAuditLog[]
 
   @@index([userId])
   @@index([status])
@@ -275,18 +387,18 @@ model KycSubmission {
 }
 
 model KycDocument {
-  id              String        @id @default(cuid())
-  submissionId    String
+  id           String @id @default(cuid())
+  submissionId String
 
-  fileType        KycFileType
-  fileName        String        @db.VarChar(255)
-  filePath        String        @db.Text
-  mimeType        String        @db.VarChar(120)
-  fileSize        Int
+  fileType KycFileType
+  fileName String      @db.VarChar(255)
+  filePath String      @db.Text
+  mimeType String      @db.VarChar(120)
+  fileSize Int
 
-  createdAt       DateTime      @default(now())
+  createdAt DateTime @default(now())
 
-  submission      KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@unique([submissionId, fileType])
   @@index([submissionId])
@@ -294,19 +406,19 @@ model KycDocument {
 }
 
 model KycAuditLog {
-  id             String         @id @default(cuid())
-  submissionId   String
-  actorUserId    String?
+  id           String  @id @default(cuid())
+  submissionId String
+  actorUserId  String?
 
-  action         String         @db.VarChar(80)
-  fromStatus     KycStatus?
-  toStatus       KycStatus?
-  reason         String?        @db.Text
+  action     String     @db.VarChar(80)
+  fromStatus KycStatus?
+  toStatus   KycStatus?
+  reason     String?    @db.Text
 
-  createdAt      DateTime       @default(now())
+  createdAt DateTime @default(now())
 
-  submission     KycSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  actor          User?          @relation("KycAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  submission KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  actor      User?         @relation("KycAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([submissionId])
   @@index([actorUserId])
@@ -314,51 +426,49 @@ model KycAuditLog {
 }
 
 model WalletBalance {
-  id              String        @id @default(cuid())
-  walletAccountId String        @unique
+  id              String @id @default(cuid())
+  walletAccountId String @unique
 
-  balance         Decimal       @default(0) @db.Decimal(36, 18)
+  balance Decimal @default(0) @db.Decimal(36, 18)
 
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  walletAccount   WalletAccount @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
+  walletAccount WalletAccount @relation(fields: [walletAccountId], references: [id], onDelete: Cascade)
 }
 
-
 model LedgerTransaction {
-  id              String                @id @default(cuid())
+  id String @id @default(cuid())
 
-  type            LedgerTransactionType
-  idempotencyKey  String                @unique @db.VarChar(180)
+  type           LedgerTransactionType
+  idempotencyKey String                @unique @db.VarChar(180)
 
-  referenceType   String?               @db.VarChar(80)
-  referenceId     String?               @db.VarChar(180)
-  description     String?               @db.Text
+  referenceType String? @db.VarChar(80)
+  referenceId   String? @db.VarChar(180)
+  description   String? @db.Text
 
-  createdAt       DateTime              @default(now())
+  createdAt DateTime @default(now())
 
-  entries         LedgerEntry[]
+  entries LedgerEntry[]
 
   @@index([type])
   @@index([referenceType, referenceId])
   @@index([createdAt])
 }
 
-
 model LedgerEntry {
-  id                    String            @id @default(cuid())
-  ledgerTransactionId   String
-  walletAccountId       String
-  assetId               String
+  id                  String @id @default(cuid())
+  ledgerTransactionId String
+  walletAccountId     String
+  assetId             String
 
-  amount                Decimal           @db.Decimal(36, 18)
+  amount Decimal @db.Decimal(36, 18)
 
-  createdAt             DateTime          @default(now())
+  createdAt DateTime @default(now())
 
-  ledgerTransaction     LedgerTransaction @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
-  walletAccount         WalletAccount     @relation(fields: [walletAccountId], references: [id], onDelete: Restrict)
-  asset                 Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  ledgerTransaction LedgerTransaction @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  walletAccount     WalletAccount     @relation(fields: [walletAccountId], references: [id], onDelete: Restrict)
+  asset             Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
 
   @@index([ledgerTransactionId])
   @@index([walletAccountId])

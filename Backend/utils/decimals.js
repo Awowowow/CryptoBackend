@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
-import AppError from "./appError";
+import AppError from "./appError.js";
+
 
 
 const toDecimal = (value, fieldName = "amount") => {
