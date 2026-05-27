@@ -6,8 +6,8 @@ const networks = [
       name: "Bitcoin",
     },
     {
-      code: "ETH",
-      name: "Ethereum",
+      code: "ETH_HOODI",
+      name: "Ethereum Hoodi",
     },
   ];
   
@@ -19,12 +19,12 @@ const assetNetworks = [
     },
     {
       assetSymbol: "ETH",
-      networkCode: "ETH",
+      networkCode: "ETH_HOODI",
       minConfirmations: 12,
     },
     {
       assetSymbol: "USDT",
-      networkCode: "ETH",
+      networkCode: "ETH_HOODI",
       minConfirmations: 12,
     },
   ];
@@ -32,7 +32,7 @@ const assetNetworks = [
 
 const seedNetworks = async () => {
     for (const network of networks){
-        await prisma.BlockchainNetwork.upsert({
+      await prisma.blockchainNetwork.upsert({
             where:{
                 code: network.code,
             },

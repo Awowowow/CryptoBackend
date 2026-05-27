@@ -1,5 +1,5 @@
 import redisClient from "../../config/redis.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../utils/AppError.js";
 
 const MARKET_OVERVIEW_CACHE_KEY = "market:overview";
 const MARKET_OVERVIEW_CACHE_TTL_SECONDS = 15;

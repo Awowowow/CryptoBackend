@@ -1,5 +1,5 @@
 import { KycStatus } from "@prisma/client";
-import AppError from "../utils/appError.js";
+import AppError from "../utils/AppError.js";
 
 
 const REVIEWABLE_KYC_STATUSES = [

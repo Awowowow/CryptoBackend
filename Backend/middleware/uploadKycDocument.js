@@ -1,7 +1,7 @@
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
-import AppError from "../utils/appError.js";
+import AppError from "../utils/AppError.js";
 import crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);

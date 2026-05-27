@@ -97,6 +97,7 @@ model BlockchainNetwork {
   assetNetworks    AssetNetwork[]
   depositAddresses DepositAddress[]
   deposits         Deposit[]
+  scanCheckpoints  BlockchainScanCheckpoint[]
 }
 
 model AssetNetwork {
@@ -186,8 +187,8 @@ model Deposit {
   networkId        String
   depositAddressId String
 
-  txHash      String @db.VarChar(255)
-  eventIndex Int @default(0)
+  txHash     String @db.VarChar(255)
+  eventIndex Int    @default(0)
 
   amount Decimal @db.Decimal(36, 18)
 
@@ -474,4 +475,19 @@ model LedgerEntry {
   @@index([walletAccountId])
   @@index([assetId])
   @@index([createdAt])
+}
+
+model BlockchainScanCheckpoint {
+  id String @id @default(cuid())
+
+  scannerKey       String @unique @db.VarChar(120)
+  networkId        String
+  lastScannedBlock BigInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  network BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
+
+  @@index([networkId])
 }

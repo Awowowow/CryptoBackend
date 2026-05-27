@@ -1,6 +1,6 @@
 import { KycFileType, KycStatus } from "@prisma/client";
 import prisma from "../../config/prisma.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../utils/AppError.js";
 import fs from "fs/promises";
 import {
   createKycAuditLog,

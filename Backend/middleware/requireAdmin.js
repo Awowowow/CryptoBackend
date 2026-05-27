@@ -1,7 +1,7 @@
 import { UserRole } from "@prisma/client";
 import prisma from "../config/prisma.js";
 import asyncWrapper from "../utils/asyncWrapper.js";
-import AppError from "../utils/appError.js";
+import AppError from "../utils/AppError.js";
 
 const requireAdmin = asyncWrapper(async (req, _res, next) => {
   const userId = req.user?.userId;

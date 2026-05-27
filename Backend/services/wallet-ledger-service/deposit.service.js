@@ -4,11 +4,11 @@ import {
   WalletAccountType,
 } from "@prisma/client";
 import prisma from "../../config/prisma.js";
-import { toDecimal } from "../../utils/decimal.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../utils/AppError.js";
+import { toDecimal } from "../../utils/decimals.js";
 import {
-  getOrCreateUserWalletAccounts,
   getOrcreateSystemWalletAccount,
+  getOrCreateUserWalletAccounts,
 } from "./walletAccount.service.js";
 import { postLedgerTransaction } from "./ledger.service.js";
 
@@ -47,12 +47,12 @@ const recordDetectedDeposit = async ({
     throw new AppError("Transaction hash is required", 400);
   }
 
-  if (!Number.isInteger(eventIndex) || eventIndex < 0) {
-    throw new AppError("Event index must be a non-negative integer", 400);
-  }
-
   if (!Number.isInteger(confirmations) || confirmations < 0) {
     throw new AppError("Confirmations must be a non-negative integer", 400);
+  }
+
+  if (!Number.isInteger(eventIndex) || eventIndex < 0) {
+    throw new AppError("Event index must be a non-negative integer", 400);
   }
 
   const normalizedAmount = toDecimal(amount, "Deposit amount");
@@ -108,7 +108,7 @@ const recordDetectedDeposit = async ({
     return existingDeposit;
   }
 
-  const deposit = await prisma.deposit.create({
+  return prisma.deposit.create({
     data: {
       userId: depositAddress.userId,
       assetNetworkId: depositAddress.assetNetworkId,
@@ -122,37 +122,16 @@ const recordDetectedDeposit = async ({
       confirmedAt: status === DepositStatus.CONFIRMED ? new Date() : null,
     },
   });
-
-  return deposit;
 };
 
-const updateDepositConfirmations = async ({
-  networkCode,
-  txHash,
-  eventIndex = 0,
-  confirmations,
-}) => {
-  const normalizedNetworkCode = networkCode.trim().toUpperCase();
-
-  if (!txHash || typeof txHash !== "string") {
-    throw new AppError("Transaction hash is required", 400);
-  }
-
-  if (!Number.isInteger(eventIndex) || eventIndex < 0) {
-    throw new AppError("Event index must be a non-negative integer", 400);
-  }
-
+const updateDepositConfirmations = async ({ depositId, confirmations }) => {
   if (!Number.isInteger(confirmations) || confirmations < 0) {
     throw new AppError("Confirmations must be a non-negative integer", 400);
   }
 
-  const deposit = await prisma.deposit.findFirst({
+  const deposit = await prisma.deposit.findUnique({
     where: {
-      txHash,
-      eventIndex,
-      network: {
-        code: normalizedNetworkCode,
-      },
+      id: depositId,
     },
     include: {
       assetNetwork: true,
@@ -170,12 +149,16 @@ const updateDepositConfirmations = async ({
     return deposit;
   }
 
+  if (confirmations < deposit.confirmations) {
+    return deposit;
+  }
+
   const nextStatus = getDepositStatusFromConfirmations({
     confirmations,
     minConfirmations: deposit.assetNetwork.minConfirmations,
   });
 
-  const updatedDeposit = await prisma.deposit.update({
+  return prisma.deposit.update({
     where: {
       id: deposit.id,
     },
@@ -183,13 +166,11 @@ const updateDepositConfirmations = async ({
       confirmations,
       status: nextStatus,
       confirmedAt:
-        nextStatus === DepositStatus.CONFIRMED
-          ? deposit.confirmedAt ?? new Date()
-          : null,
+        nextStatus === DepositStatus.CONFIRMED && deposit.confirmedAt === null
+          ? new Date()
+          : deposit.confirmedAt,
     },
   });
-
-  return updatedDeposit;
 };
 
 const creditConfirmedDeposit = async ({ depositId }) => {
@@ -219,15 +200,15 @@ const creditConfirmedDeposit = async ({ depositId }) => {
     assetId: deposit.assetNetwork.assetId,
   });
 
-  const userAvailableAccount = userWalletAccounts.find(
-    (account) => account.type === WalletAccountType.AVAILABLE
+  const userAvailableWalletAccount = userWalletAccounts.find(
+    (walletAccount) => walletAccount.type === WalletAccountType.AVAILABLE
   );
 
-  if (!userAvailableAccount) {
+  if (!userAvailableWalletAccount) {
     throw new AppError("User available wallet account is missing", 500);
   }
 
-  const custodyAccount = await getOrcreateSystemWalletAccount({
+  const systemCustodyWalletAccount = await getOrcreateSystemWalletAccount({
     assetId: deposit.assetNetwork.assetId,
     type: WalletAccountType.CUSTODY,
     label: "Main custody account",
@@ -235,25 +216,25 @@ const creditConfirmedDeposit = async ({ depositId }) => {
 
   await postLedgerTransaction({
     type: LedgerTransactionType.DEPOSIT,
-    idempotencyKey: `deposit:${deposit.id}`,
+    idempotencyKey: `deposit-credit:${deposit.id}`,
     referenceType: "DEPOSIT",
     referenceId: deposit.id,
-    description: `Blockchain deposit credit for ${deposit.txHash}`,
+    description: `Credit deposit ${deposit.id}`,
     entries: [
       {
-        walletAccountId: custodyAccount.id,
+        walletAccountId: systemCustodyWalletAccount.id,
         assetId: deposit.assetNetwork.assetId,
         amount: deposit.amount.negated(),
       },
       {
-        walletAccountId: userAvailableAccount.id,
+        walletAccountId: userAvailableWalletAccount.id,
         assetId: deposit.assetNetwork.assetId,
         amount: deposit.amount,
       },
     ],
   });
 
-  const creditedDeposit = await prisma.deposit.update({
+  return prisma.deposit.update({
     where: {
       id: deposit.id,
     },
@@ -262,48 +243,98 @@ const creditConfirmedDeposit = async ({ depositId }) => {
       creditedAt: new Date(),
     },
   });
-
-  return creditedDeposit;
 };
 
-const processDetectedDeposit = async ({
-  networkCode,
-  address,
-  memo = null,
-  txHash,
-  eventIndex = 0,
-  amount,
-  confirmations = 0,
-}) => {
-  const deposit = await recordDetectedDeposit({
-    networkCode,
-    address,
-    memo,
-    txHash,
-    eventIndex,
-    amount,
-    confirmations,
-  });
+const processDetectedDeposit = async (payload) => {
+  const deposit = await recordDetectedDeposit(payload);
 
   const updatedDeposit = await updateDepositConfirmations({
-    networkCode,
-    txHash,
-    eventIndex,
-    confirmations,
+    depositId: deposit.id,
+    confirmations: payload.confirmations ?? deposit.confirmations,
   });
 
-  if (updatedDeposit.status === DepositStatus.CONFIRMED) {
-    return creditConfirmedDeposit({
-      depositId: updatedDeposit.id,
-    });
+  if (updatedDeposit.status !== DepositStatus.CONFIRMED) {
+    return updatedDeposit;
   }
 
-  return updatedDeposit;
+  return creditConfirmedDeposit({ depositId: updatedDeposit.id });
+};
+
+const listUserDeposits = async ({ userId }) => {
+  if (!userId) {
+    throw new AppError("User id is required", 400);
+  }
+
+  const deposits = await prisma.deposit.findMany({
+    where: {
+      userId,
+    },
+    orderBy: {
+      detectedAt: "desc",
+    },
+    select: {
+      id: true,
+      txHash: true,
+      eventIndex: true,
+      amount: true,
+      status: true,
+      confirmations: true,
+      detectedAt: true,
+      confirmedAt: true,
+      creditedAt: true,
+      assetNetwork: {
+        select: {
+          minConfirmations: true,
+          asset: {
+            select: {
+              id: true,
+              symbol: true,
+              name: true,
+              decimals: true,
+            },
+          },
+          network: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      },
+      depositAddress: {
+        select: {
+          address: true,
+          memo: true,
+        },
+      },
+    },
+  });
+
+  return deposits.map((deposit) => {
+    return {
+      id: deposit.id,
+      txHash: deposit.txHash,
+      eventIndex: deposit.eventIndex,
+      amount: deposit.amount.toString(),
+      status: deposit.status,
+      confirmations: deposit.confirmations,
+      requiredConfirmations: deposit.assetNetwork.minConfirmations,
+      detectedAt: deposit.detectedAt,
+      confirmedAt: deposit.confirmedAt,
+      creditedAt: deposit.creditedAt,
+      asset: deposit.assetNetwork.asset,
+      network: deposit.assetNetwork.network,
+      address: deposit.depositAddress.address,
+      memo: deposit.depositAddress.memo,
+    };
+  });
 };
 
 export {
   creditConfirmedDeposit,
+  processDetectedDeposit,
   recordDetectedDeposit,
   updateDepositConfirmations,
-  processDetectedDeposit,
+  listUserDeposits
 };

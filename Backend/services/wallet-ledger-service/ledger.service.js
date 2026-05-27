@@ -1,7 +1,7 @@
 import { LedgerTransactionType, Prisma } from "@prisma/client";
 import prisma from "../../config/prisma.js";
-import { toDecimal } from "../../utils/decimal.js";
-import AppError from "../../utils/appError.js";
+import AppError from "../../utils/AppError.js";
+import { toDecimal } from "../../utils/decimals.js";
 
 
 const postLedgerTransaction = async ({
@@ -197,5 +197,5 @@ const postLedgerTransaction = async ({
 
   return ledgerTransaction;
 };
-
-export { postLedgerTransaction };
+ 
+export { postLedgerTransaction }; 

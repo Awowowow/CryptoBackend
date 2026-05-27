@@ -58,6 +58,7 @@ const getOrcreateSystemWalletAccount = async ({ assetId, type, systemAccountKey 
             assetId,
             ownerType: WalletOwnerType.SYSTEM,
             type,
+            systemAccountKey,
             label,
             balance:{
                 create:{

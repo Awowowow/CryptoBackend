@@ -8,16 +8,17 @@ import cookieParser from "cookie-parser";
 const app = express();
 import "./services/auth-service/email.service.js"
 import userRouter from './router/user.js';
-import AppError from './utils/appError.js';
+import AppError from './utils/AppError.js';
 import { kycRouter } from './router/kyc.js';
 import adminRouter from './router/admin.js';
 import walletRouter from './router/wallet.js';
 import marketRouter from './router/market.js';
+import blockchainRouter from './router/blockchain.js';
 
 app.use(cookieParser());
 app.use(
     cors({
-      origin: 'http://localhost:5173',
+      origin: ['https://app.cryptoex.me', 'https://cryptoex.me'],
       credentials: true,
     })
   )
@@ -36,6 +37,8 @@ app.use("/kyc", kycRouter)
 app.use("/admin", adminRouter)
 app.use("/wallet", walletRouter)
 app.use("/market", marketRouter)
+app.use("/blockchain", blockchainRouter)
+
 
 app.use((_req, _res, next) => {
     next(new AppError('Route not found', 404));

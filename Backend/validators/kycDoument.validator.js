@@ -1,5 +1,5 @@
 import { KycFileType } from "@prisma/client";
-import AppError from "../utils/appError.js";
+import AppError from "../utils/AppError.js";
 
 const validateKycDocumentUploadInput = ({ fileType }) => {
   if (!fileType) {

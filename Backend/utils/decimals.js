@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import AppError from "./appError.js";
+import AppError from "./AppError.js";
 
 
 
