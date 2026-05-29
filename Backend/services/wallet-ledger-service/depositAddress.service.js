@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
-import { createBitGoReceiveAddress } from "../blockchain-service/bitgoWalletProvider.service.js";
+import { createCustodyReceiveAddress } from "../custody-service/custodyProvider.service.js";
 
 const formatDepositAddress = (depositAddress) => {
   return {
@@ -75,7 +75,8 @@ const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
     return formatDepositAddress(existingDepositAddress);
   }
 
-  const bitgoReceiveAddress = await createBitGoReceiveAddress({
+  const custodyReceiveAddress = await createCustodyReceiveAddress({
+    networkCode: assetNetwork.network.code,
     label: `CryptoEx ${assetNetwork.asset.symbol} deposit for user ${userId}`,
   });
 
@@ -84,7 +85,7 @@ const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
       userId,
       assetNetworkId: assetNetwork.id,
       networkId: assetNetwork.network.id,
-      address: bitgoReceiveAddress.address,
+      address: custodyReceiveAddress.address,
     },
     include: {
       assetNetwork: {

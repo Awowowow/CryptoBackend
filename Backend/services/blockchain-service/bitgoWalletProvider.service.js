@@ -10,40 +10,74 @@ const getRequiredEnv = (name) => {
   return value;
 };
 
+const getBitGoWalletConfig = (networkCode) => {
+  if (networkCode !== "ETH_HOODI") {
+    throw new AppError(
+      "BitGo is not configured for this network",
+      400
+    );
+  }
 
-const createBitGoReceiveAddress = async ({ label }) => {
-    const bitgoExpressUrl = process.env.BITGO_EXPRESS_URL || "http://localhost:3080";
-    const accessToken = getRequiredEnv("BITGO_ACCESS_TOKEN");
-    const coin = getRequiredEnv("BITGO_ETH_TEST_COIN");
-    const walletId = getRequiredEnv("BITGO_ETH_WALLET_ID");
-  
-    const response = await fetch(
-        `https://app.bitgo-test.com/api/v2/${coin}/wallet/${walletId}/address`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            label,
-          }),
-        }
-      );
+  return {
+    coin: getRequiredEnv("BITGO_ETH_TEST_COIN"),
+    walletId: getRequiredEnv("BITGO_ETH_WALLET_ID"),
+  };
+};
 
-    const data = await response.json();
+const requestBitGo = async ({ url, method = "GET", body = null }) => {
+  const accessToken = getRequiredEnv("BITGO_ACCESS_TOKEN");
 
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await response.json();
 
   if (!response.ok) {
     throw new AppError(
-      data.error || data.message || "Failed to create BitGo receive address",
+      data.error || data.message || "BitGo request failed",
       response.status
     );
   }
+
+  return data;
+};
+
+const createBitGoReceiveAddress = async ({ networkCode, label }) => {
+  const { coin, walletId } = getBitGoWalletConfig(networkCode);
+
+  const data = await requestBitGo({
+    url: `https://app.bitgo-test.com/api/v2/${coin}/wallet/${walletId}/address`,
+    method: "POST",
+    body: {
+      label,
+    },
+  });
+
   return {
     address: data.address,
     bitgoAddressId: data.id ?? null,
   };
-}
+};
 
-export { createBitGoReceiveAddress };
+const getBitGoTransfer = async ({ networkCode, transferId }) => {
+  if (!transferId || typeof transferId !== "string") {
+    throw new AppError("BitGo transfer id is required", 400);
+  }
+
+  const { coin, walletId } = getBitGoWalletConfig(networkCode);
+
+  return requestBitGo({
+    url: `https://app.bitgo-test.com/api/v2/${coin}/wallet/${walletId}/transfer/${transferId}`,
+  });
+};
+
+export {
+  createBitGoReceiveAddress,
+  getBitGoTransfer,
+};

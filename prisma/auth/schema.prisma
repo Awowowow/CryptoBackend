@@ -68,6 +68,19 @@ enum DepositStatus {
   REJECTED
 }
 
+enum CustodyProviderType {
+  BITGO
+}
+
+enum CustodyWebhookEventStatus {
+  RECEIVED
+  VERIFIED
+  PROCESSING
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
 model Asset {
   id       String  @id @default(cuid())
   symbol   String  @unique @db.VarChar(20)
@@ -490,4 +503,33 @@ model BlockchainScanCheckpoint {
   network BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
 
   @@index([networkId])
+}
+
+model CustodyWebhookEvent {
+  id String @id @default(cuid())
+
+  provider        CustodyProviderType
+  externalEventId String              @db.VarChar(255)
+  eventType       String              @db.VarChar(80)
+
+  walletId   String? @db.VarChar(255)
+  transferId String? @db.VarChar(255)
+  coin       String? @db.VarChar(40)
+
+  payload Json
+
+  status       CustodyWebhookEventStatus @default(RECEIVED)
+  errorMessage String?                   @db.Text
+
+  receivedAt  DateTime  @default(now())
+  verifiedAt  DateTime?
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, externalEventId])
+  @@index([provider, status])
+  @@index([transferId])
+  @@index([receivedAt])
 }
