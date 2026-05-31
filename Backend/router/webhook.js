@@ -1,18 +1,13 @@
 import express from 'express';
-import { fetchBitGoWebhookTransferForDev, processBitGoWebhookTransferForDev, receiveBitGoWebhook } from '../controllers/custodyWebhook.controller.js';
+import { receiveBitGoWebhook } from '../controllers/custodyWebhook.controller.js';
+import verifyBitGoWebhookSignature from '../middleware/verifyBitGoWebhookSignature.js';
+import preventBitGoWebhookReplay from '../middleware/preventBitGoWebhookReplay.js';
+import validateBitGoWebhookPayload from '../middleware/validateBitGoWebhookPayload.js';
 
 const webhookRouter = express.Router();
 
-webhookRouter.post("/custody/bitgo", receiveBitGoWebhook);
+webhookRouter.post("/custody/bitgo",verifyBitGoWebhookSignature,preventBitGoWebhookReplay,validateBitGoWebhookPayload, receiveBitGoWebhook);
 
-webhookRouter.post(
-    "/custody/bitgo/events/:eventId/fetch-transfer",
-    fetchBitGoWebhookTransferForDev
-  );
 
-  webhookRouter.post(
-    "/custody/bitgo/events/:eventId/process-transfer",
-    processBitGoWebhookTransferForDev
-  );
 
 export default webhookRouter;
