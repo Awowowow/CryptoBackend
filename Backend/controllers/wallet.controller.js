@@ -43,4 +43,6 @@ const getWalletDeposits = asyncWrapper(async (req,res) =>{
       });
 })
 
+
+
 export {getWalletBalance,getDepositAddress, getWalletDeposits}

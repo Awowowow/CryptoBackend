@@ -1,7 +1,7 @@
 import {
   CUSTODY_WEBHOOK_JOB_NAMES,
   custodyWebhookQueue,
-} from "../../queues/custodyWebhook.queue.js";
+} from "../queues/custodyWebhook.queue.js";
 
 const enqueueCustodyWebhookProcessingJob = async ({ eventId }) => {
   return custodyWebhookQueue.add(

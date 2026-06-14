@@ -1,5 +1,5 @@
 import AppError from "../../utils/AppError.js";
-import { createBitGoReceiveAddress, getBitGoTransfer } from "../blockchain-service/bitgoWalletProvider.service.js";
+import { createBitGoReceiveAddress, getBitGoTransfer, sendBitGoWithdrawal } from "../blockchain-service/bitgoWalletProvider.service.js";
 
 const CustodyProvider = Object.freeze({
   BITGO: "BITGO",
@@ -28,6 +28,29 @@ const getCustodyTransfer = async ({
   throw new AppError("Unsupported custody provider", 400);
 };
 
+const sendCustodyWithdrawal = async ({
+  provider = CustodyProvider.BITGO,
+  networkCode,
+  address,
+  amountBaseUnits,
+  comment = null,
+}) => {
+  if (!networkCode || typeof networkCode !== "string") {
+    throw new AppError("Custody network code is required", 400);
+  }
+
+  if (provider === CustodyProvider.BITGO) {
+    return sendBitGoWithdrawal({
+      networkCode,
+      address,
+      amountBaseUnits,
+      comment,
+    });
+  }
+
+  throw new AppError("Unsupported custody provider", 400);
+};
+
 const createCustodyReceiveAddress = async ({
   provider = CustodyProvider.BITGO,
   networkCode,
@@ -50,5 +73,6 @@ const createCustodyReceiveAddress = async ({
 export {
   createCustodyReceiveAddress,
   CustodyProvider,
-  getCustodyTransfer
+  getCustodyTransfer,
+  sendCustodyWithdrawal,
 };

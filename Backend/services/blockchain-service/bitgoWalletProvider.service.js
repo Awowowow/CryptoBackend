@@ -77,7 +77,51 @@ const getBitGoTransfer = async ({ networkCode, transferId }) => {
   });
 };
 
+const sendBitGoWithdrawal = async ({
+  networkCode,
+  address,
+  amountBaseUnits,
+  comment = null,
+}) => {
+  if (!address || typeof address !== "string") {
+    throw new AppError("BitGo withdrawal address is required", 400);
+  }
+
+  if (
+    !amountBaseUnits ||
+    typeof amountBaseUnits !== "string" ||
+    !/^\d+$/.test(amountBaseUnits)
+  ) {
+    throw new AppError("BitGo withdrawal amount is invalid", 400);
+  }
+
+  const normalizedAddress = address.trim();
+
+  if (!normalizedAddress) {
+    throw new AppError("BitGo withdrawal address is required", 400);
+  }
+
+  const { coin, walletId } = getBitGoWalletConfig(networkCode);
+
+  const body = {
+    address: normalizedAddress,
+    amount: amountBaseUnits,
+  };
+
+  if (comment) {
+    body.comment = comment;
+  }
+
+  return requestBitGo({
+    url: `${process.env.BITGO_EXPRESS_URL || "http://localhost:3080"}/api/v2/${coin}/wallet/${walletId}/sendcoins`,
+    method: "POST",
+    body,
+  });
+};
+
+
 export {
   createBitGoReceiveAddress,
   getBitGoTransfer,
+  sendBitGoWithdrawal,
 };

@@ -68,8 +68,31 @@ enum DepositStatus {
   REJECTED
 }
 
+enum WithdrawalStatus {
+  REQUESTED
+  SECURITY_CHECKED
+  FUNDS_LOCKED
+  PENDING_REVIEW
+  APPROVED
+  PROCESSING
+  SUBMITTED
+  BROADCASTED
+  CONFIRMED
+  COMPLETED
+  FAILED
+  REJECTED
+  CANCELLED
+}
+
 enum CustodyProviderType {
   BITGO
+}
+
+enum WithdrawalAddressStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  DISABLED
+  REJECTED
 }
 
 enum CustodyWebhookEventStatus {
@@ -94,6 +117,7 @@ model Asset {
   walletAccounts WalletAccount[]
   ledgerEntries  LedgerEntry[]
   assetNetworks  AssetNetwork[]
+  withdrawals    Withdrawal[]
 }
 
 model BlockchainNetwork {
@@ -107,10 +131,12 @@ model BlockchainNetwork {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  assetNetworks    AssetNetwork[]
-  depositAddresses DepositAddress[]
-  deposits         Deposit[]
-  scanCheckpoints  BlockchainScanCheckpoint[]
+  assetNetworks       AssetNetwork[]
+  depositAddresses    DepositAddress[]
+  deposits            Deposit[]
+  scanCheckpoints     BlockchainScanCheckpoint[]
+  withdrawalAddresses WithdrawalAddress[]
+  withdrawals         Withdrawal[]
 }
 
 model AssetNetwork {
@@ -132,8 +158,10 @@ model AssetNetwork {
   asset   Asset             @relation(fields: [assetId], references: [id], onDelete: Restrict)
   network BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
 
-  depositAddresses DepositAddress[]
-  deposits         Deposit[]
+  depositAddresses    DepositAddress[]
+  deposits            Deposit[]
+  withdrawalAddresses WithdrawalAddress[]
+  withdrawals         Withdrawal[]
 
   @@unique([assetId, networkId])
   @@index([networkId])
@@ -257,8 +285,12 @@ model User {
   walletAccounts         WalletAccount[]
   depositAddresses       DepositAddress[]
   deposits               Deposit[]
-  reviewedKycSubmissions KycSubmission[]  @relation("KycReviewedBy")
-  kycAuditLogs           KycAuditLog[]    @relation("KycAuditActor")
+  reviewedKycSubmissions KycSubmission[]      @relation("KycReviewedBy")
+  kycAuditLogs           KycAuditLog[]        @relation("KycAuditActor")
+  withdrawalAddresses    WithdrawalAddress[]
+  withdrawals            Withdrawal[]         @relation("UserWithdrawals")
+  reviewedWithdrawals    Withdrawal[]         @relation("WithdrawalReviewedBy")
+  withdrawalAuditLogs    WithdrawalAuditLog[] @relation("WithdrawalAuditActor")
 }
 
 model TrustedDevice {
@@ -532,4 +564,135 @@ model CustodyWebhookEvent {
   @@index([provider, status])
   @@index([transferId])
   @@index([receivedAt])
+}
+
+model WithdrawalAddress {
+  id String @id @default(cuid())
+
+  userId         String
+  assetNetworkId String
+  networkId      String
+
+  label   String? @db.VarChar(120)
+  address String  @db.VarChar(255)
+  memo    String? @db.VarChar(255)
+
+  status WithdrawalAddressStatus @default(PENDING_VERIFICATION)
+
+  verifiedAt DateTime?
+  disabledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetNetwork AssetNetwork      @relation(fields: [assetNetworkId], references: [id], onDelete: Restrict)
+  network      BlockchainNetwork @relation(fields: [networkId], references: [id], onDelete: Restrict)
+
+  withdrawals Withdrawal[]
+
+  @@unique([userId, assetNetworkId, address, memo])
+  @@index([userId])
+  @@index([assetNetworkId])
+  @@index([networkId])
+  @@index([status])
+}
+
+model Withdrawal {
+  id String @id @default(cuid())
+
+  userId              String
+  assetId             String
+  assetNetworkId      String
+  networkId           String
+  withdrawalAddressId String?
+
+  destinationAddress String  @db.VarChar(255)
+  destinationMemo    String? @db.VarChar(255)
+
+  amount      Decimal @db.Decimal(36, 18)
+  feeAmount   Decimal @default(0) @db.Decimal(36, 18)
+  totalAmount Decimal @db.Decimal(36, 18)
+
+  status WithdrawalStatus @default(REQUESTED)
+
+  confirmations         Int @default(0)
+  requiredConfirmations Int @default(0)
+
+  idempotencyKey String @unique @db.VarChar(180)
+
+  provider           CustodyProviderType @default(BITGO)
+  providerTransferId String?             @db.VarChar(255)
+  txHash             String?             @db.VarChar(255)
+
+  riskScore            Int     @default(0)
+  riskReason           String? @db.Text
+  requiresManualReview Boolean @default(false)
+
+  failureReason   String? @db.Text
+  rejectionReason String? @db.Text
+  cancelledReason String? @db.Text
+
+  requestedAt       DateTime  @default(now())
+  securityCheckedAt DateTime?
+  fundsLockedAt     DateTime?
+  reviewRequestedAt DateTime?
+  approvedAt        DateTime?
+  processingAt      DateTime?
+  submittedAt       DateTime?
+  broadcastedAt     DateTime?
+  confirmedAt       DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  rejectedAt        DateTime?
+  cancelledAt       DateTime?
+
+  reviewedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user              User               @relation("UserWithdrawals", fields: [userId], references: [id], onDelete: Cascade)
+  asset             Asset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  assetNetwork      AssetNetwork       @relation(fields: [assetNetworkId], references: [id], onDelete: Restrict)
+  network           BlockchainNetwork  @relation(fields: [networkId], references: [id], onDelete: Restrict)
+  withdrawalAddress WithdrawalAddress? @relation(fields: [withdrawalAddressId], references: [id], onDelete: SetNull)
+  reviewedBy        User?              @relation("WithdrawalReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  auditLogs WithdrawalAuditLog[]
+
+  @@unique([provider, providerTransferId])
+  @@index([userId])
+  @@index([assetId])
+  @@index([assetNetworkId])
+  @@index([networkId])
+  @@index([withdrawalAddressId])
+  @@index([status])
+  @@index([txHash])
+  @@index([requiresManualReview, status])
+  @@index([createdAt])
+}
+
+model WithdrawalAuditLog {
+  id String @id @default(cuid())
+
+  withdrawalId String
+  actorUserId  String?
+
+  action     String            @db.VarChar(80)
+  fromStatus WithdrawalStatus?
+  toStatus   WithdrawalStatus?
+
+  reason   String? @db.Text
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  withdrawal Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  actor      User?      @relation("WithdrawalAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([withdrawalId])
+  @@index([actorUserId])
+  @@index([toStatus])
+  @@index([createdAt])
 }
