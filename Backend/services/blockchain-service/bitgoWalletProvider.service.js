@@ -106,6 +106,8 @@ const sendBitGoWithdrawal = async ({
   const body = {
     address: normalizedAddress,
     amount: amountBaseUnits,
+    type: "transfer",
+    walletPassphrase: getRequiredEnv("BITGO_WALLET_PASSPHRASE"),
   };
 
   if (comment) {

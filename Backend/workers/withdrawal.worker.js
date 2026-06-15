@@ -5,29 +5,38 @@ import {
   WITHDRAWAL_QUEUE_NAME,
 } from "../queues/withdrawal.queue.js";
 import { Worker } from "bullmq";
-import { processApprovedWithdrawal } from "../services/wallet-ledger-service/withdrawalProcessor.service.js";
+import { finalizeSubmittedWithdrawal, processApprovedWithdrawal } from "../services/wallet-ledger-service/withdrawalProcessor.service.js";
 
 let isShuttingDown = false;
 
 const withdrawalWorker = new Worker(
   WITHDRAWAL_QUEUE_NAME,
-  async (job) => {
-    if (job.name != WITHDRAWAL_JOB_NAMES.PROCESS_APPROVED_WITHDRAWAL) {
-      throw new Error(`Unsupported Withdrawal job: ${job.name}`);
+  async (job) => { 
+    const { withdrawalId } = job.data ?? {};
+    
+    if (!withdrawalId || typeof withdrawalId !== "string") {
+      throw new Error("Withdrawal job withdrawalId is required");
     }
 
-    const { withdrawalId } = job.data ?? {};
-    if (!withdrawalId || typeof withdrawalId !== "string") {
-        throw new Error("Withdrawal job withdrawalId is required");
-      }
     console.log("Withdrawal job started:", {
       jobId: job.id,
       withdrawalId,
       attempt: job.attemptsMade + 1,
     });
-    return processApprovedWithdrawal({
-      withdrawalId,
-    });
+
+    if (job.name === WITHDRAWAL_JOB_NAMES.PROCESS_APPROVED_WITHDRAWAL) {
+      return processApprovedWithdrawal({
+        withdrawalId,
+      });
+    }
+    
+    if (job.name === WITHDRAWAL_JOB_NAMES.FINALIZE_SUBMITTED_WITHDRAWAL) {
+      return finalizeSubmittedWithdrawal({
+        withdrawalId,
+      });
+    }
+    
+    throw new Error(`Unsupported withdrawal job: ${job.name}`);
   },
   {
     connection: redisConnection,

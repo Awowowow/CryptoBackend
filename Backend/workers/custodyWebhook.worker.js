@@ -36,7 +36,9 @@ const custodyWebhookWorker = new Worker(
     return {
       eventId,
       eventStatus: result.event.status,
+      resourceType: result.resourceType,
       depositId: result.deposit?.id ?? null,
+      withdrawalId: result.withdrawal?.withdrawalId ?? null,
     };
   },
   {

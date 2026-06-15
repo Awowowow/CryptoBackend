@@ -104,6 +104,13 @@ enum CustodyWebhookEventStatus {
   REJECTED
 }
 
+enum DomainEventOutboxStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
 model Asset {
   id       String  @id @default(cuid())
   symbol   String  @unique @db.VarChar(20)
@@ -621,9 +628,12 @@ model Withdrawal {
 
   idempotencyKey String @unique @db.VarChar(180)
 
-  provider           CustodyProviderType @default(BITGO)
-  providerTransferId String?             @db.VarChar(255)
-  txHash             String?             @db.VarChar(255)
+  provider                  CustodyProviderType @default(BITGO)
+  providerTransferId        String?             @db.VarChar(255)
+  providerTxRequestId       String?             @db.VarChar(255)
+  providerPendingApprovalId String?             @db.VarChar(255)
+  providerState             String?             @db.VarChar(80)
+  txHash                    String?             @db.VarChar(255)
 
   riskScore            Int     @default(0)
   riskReason           String? @db.Text
@@ -671,6 +681,8 @@ model Withdrawal {
   @@index([txHash])
   @@index([requiresManualReview, status])
   @@index([createdAt])
+  @@index([providerTxRequestId])
+  @@index([providerPendingApprovalId])
 }
 
 model WithdrawalAuditLog {
@@ -695,4 +707,33 @@ model WithdrawalAuditLog {
   @@index([actorUserId])
   @@index([toStatus])
   @@index([createdAt])
+}
+
+model DomainEventOutbox {
+  id String @id @default(cuid())
+
+  eventType     String @db.VarChar(120)
+  aggregateType String @db.VarChar(80)
+  aggregateId   String @db.VarChar(180)
+
+  idempotencyKey String @unique @db.VarChar(180)
+
+  payload Json
+
+  status DomainEventOutboxStatus @default(PENDING)
+
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  lockedAt    DateTime?
+  publishedAt DateTime?
+
+  lastError String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, availableAt, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType])
+  @@index([publishedAt])
 }

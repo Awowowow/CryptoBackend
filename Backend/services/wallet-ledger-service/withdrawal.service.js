@@ -9,6 +9,7 @@ import { toDecimal } from "../../utils/decimals.js";
 import { enqueueApprovedWithdrawalJob } from "../../jobs/withdrawalJob.service.js";
 import { postLedgerTransaction } from "./ledger.service.js";
 import { getOrCreateUserWalletAccounts } from "./walletAccount.service.js";
+import { createWithdrawalDomainEvent, WithdrawalDomainEventType } from "../event-service/withdrawalDomainEvent.service.js";
 
 // Keep this configurable so review thresholds can change without a code deploy.
 const getManualReviewThreshold = () => {
@@ -100,8 +101,11 @@ const formatWithdrawal = (withdrawal) => {
     requiresManualReview: withdrawal.requiresManualReview,
     riskScore: withdrawal.riskScore,
     riskReason: withdrawal.riskReason,
-    txHash: withdrawal.txHash,
     providerTransferId: withdrawal.providerTransferId,
+    providerTxRequestId: withdrawal.providerTxRequestId,
+    providerPendingApprovalId: withdrawal.providerPendingApprovalId,
+    providerState: withdrawal.providerState,
+    txHash: withdrawal.txHash,
     requestedAt: withdrawal.requestedAt,
     completedAt: withdrawal.completedAt,
     auditLogs: withdrawal.auditLogs?.map((auditLog) => ({
@@ -271,6 +275,15 @@ const createWithdrawalRequest = async ({
     },
   });
 
+  await createWithdrawalDomainEvent({
+    eventType: WithdrawalDomainEventType.REQUESTED,
+    withdrawal,
+    payload: {
+      assetSymbol: normalizedAssetSymbol,
+      networkCode: normalizedNetworkCode,
+    },
+  });
+
   await createWithdrawalAuditLog({
     withdrawalId: withdrawal.id,
     actorUserId: userId,
@@ -307,6 +320,14 @@ const createWithdrawalRequest = async ({
     toStatus: WithdrawalStatus.FUNDS_LOCKED,
   });
 
+  await createWithdrawalDomainEvent({
+    eventType: WithdrawalDomainEventType.FUNDS_LOCKED,
+    withdrawal: {
+      ...withdrawal,
+      status: WithdrawalStatus.FUNDS_LOCKED,
+    },
+  });
+
   // Only mark the withdrawal approved/reviewable after funds are successfully locked.
   const updatedWithdrawal = await prisma.withdrawal.update({
     where: {
@@ -333,6 +354,18 @@ const createWithdrawalRequest = async ({
     fromStatus: WithdrawalStatus.FUNDS_LOCKED,
     toStatus: nextStatus,
     reason: reviewDecision.riskReason,
+  });
+
+  await createWithdrawalDomainEvent({
+    eventType: reviewDecision.requiresManualReview
+      ? WithdrawalDomainEventType.PENDING_REVIEW
+      : WithdrawalDomainEventType.APPROVED,
+    withdrawal: updatedWithdrawal,
+    payload: {
+      riskScore: updatedWithdrawal.riskScore,
+      riskReason: updatedWithdrawal.riskReason,
+      requiresManualReview: updatedWithdrawal.requiresManualReview,
+    },
   });
 
   if (updatedWithdrawal.status === WithdrawalStatus.APPROVED) {
@@ -527,5 +560,6 @@ export {
   unlockWithdrawalFunds,
   failWithdrawalAndUnlockFunds,
   getUserWithdrawals,
-  getUserWithdrawalsById
+  getUserWithdrawalsById,
+  createWithdrawalAuditLog
 };

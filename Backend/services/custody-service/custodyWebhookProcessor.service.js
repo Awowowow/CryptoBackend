@@ -4,6 +4,7 @@ import prisma from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { processDetectedDeposit } from "../wallet-ledger-service/deposit.service.js";
 import { getCustodyTransfer } from "./custodyProvider.service.js";
+import { finalizeSubmittedWithdrawal } from "../wallet-ledger-service/withdrawalProcessor.service.js";
 
 const BITGO_COIN_NETWORK_MAP = Object.freeze({
   hteth: "ETH_HOODI",
@@ -78,7 +79,9 @@ const markWebhookEventProcessed = async ({ eventId }) => {
 
 const markWebhookEventFailed = async ({ eventId, error }) => {
   const message =
-    error instanceof Error ? error.message : "Custody webhook processing failed";
+    error instanceof Error
+      ? error.message
+      : "Custody webhook processing failed";
 
   await prisma.custodyWebhookEvent.update({
     where: {
@@ -166,6 +169,101 @@ const fetchTransferForBitGoWebhookEvent = async ({ eventId }) => {
   };
 };
 
+const processBitGoReceiveTransferWebhook = async ({
+  event,
+  networkCode,
+  transfer,
+}) => {
+  if (!["confirmed", "unconfirmed"].includes(transfer.state)) {
+    await rejectWebhookEvent({
+      eventId: event.id,
+      message: `Unsupported BitGo receive transfer state: ${transfer.state}`,
+    });
+  }
+
+  if (!transfer.txid || typeof transfer.txid !== "string") {
+    throw new AppError("BitGo transfer txid is missing", 400);
+  }
+
+  const receivedEntry = getReceivedTransferEntry(transfer);
+  const receivedAmount = parseBitGoIntegerAmount(receivedEntry.valueString);
+
+  const confirmations = Number(transfer.confirmations ?? 0);
+
+  if (!Number.isInteger(confirmations) || confirmations < 0) {
+    throw new AppError("BitGo transfer confirmations are invalid", 400);
+  }
+
+  const deposit = await processDetectedDeposit({
+    networkCode,
+    address: receivedEntry.address.toLowerCase(),
+    txHash: transfer.txid,
+    eventIndex: 0,
+    amount: formatEther(receivedAmount),
+    confirmations,
+  });
+
+  return {
+    resourceType: "deposit",
+    deposit,
+  };
+};
+
+const processBitGoSendTransferWebhook = async ({
+  event,
+  networkCode,
+  transfer,
+}) => {
+  const lookupConditions = [];
+
+  if (transfer.id && typeof transfer.id === "string") {
+    lookupConditions.push({
+      providerTransferId: transfer.id,
+    });
+  }
+
+  const txHash =
+    transfer.txid ||
+    transfer.txHash ||
+    transfer.normalizedTxHash ||
+    null;
+
+  if (txHash && typeof txHash === "string") {
+    lookupConditions.push({
+      txHash,
+    });
+  }
+
+  if (lookupConditions.length === 0) {
+    throw new AppError("BitGo send transfer id or tx hash is required", 400);
+  }
+
+  const withdrawal = await prisma.withdrawal.findFirst({
+    where: {
+      network: {
+        code: networkCode,
+      },
+      OR: lookupConditions,
+    },
+  });
+
+  if (!withdrawal) {
+    await rejectWebhookEvent({
+      eventId: event.id,
+      message: "Matching CryptoEx withdrawal was not found for BitGo send transfer",
+    });
+  }
+
+  const withdrawalResult = await finalizeSubmittedWithdrawal({
+    withdrawalId: withdrawal.id,
+  });
+
+  return {
+    resourceType: "withdrawal",
+    withdrawal: withdrawalResult,
+  };
+};
+
 const processBitGoTransferWebhookEvent = async ({ eventId }) => {
   let event;
 
@@ -184,41 +282,26 @@ const processBitGoTransferWebhookEvent = async ({ eventId }) => {
       transferId: event.transferId,
     });
 
-    if (transfer.type !== "receive") {
+    let result;
+
+    if (transfer.type === "receive") {
+      result = await processBitGoReceiveTransferWebhook({
+        event,
+        networkCode: preparedEvent.networkCode,
+        transfer,
+      });
+    } else if (transfer.type === "send") {
+      result = await processBitGoSendTransferWebhook({
+        event,
+        networkCode: preparedEvent.networkCode,
+        transfer,
+      });
+    } else {
       await rejectWebhookEvent({
         eventId: event.id,
-        message: "BitGo transfer is not an incoming receive transfer",
+        message: `Unsupported BitGo transfer type: ${transfer.type}`,
       });
     }
-
-    if (!["confirmed", "unconfirmed"].includes(transfer.state)) {
-      await rejectWebhookEvent({
-        eventId: event.id,
-        message: `Unsupported BitGo transfer state: ${transfer.state}`,
-      });
-    }
-
-    if (!transfer.txid || typeof transfer.txid !== "string") {
-      throw new AppError("BitGo transfer txid is missing", 400);
-    }
-
-    const receivedEntry = getReceivedTransferEntry(transfer);
-    const receivedAmount = parseBitGoIntegerAmount(receivedEntry.valueString);
-
-    const confirmations = Number(transfer.confirmations ?? 0);
-
-    if (!Number.isInteger(confirmations) || confirmations < 0) {
-      throw new AppError("BitGo transfer confirmations are invalid", 400);
-    }
-
-    const deposit = await processDetectedDeposit({
-      networkCode: preparedEvent.networkCode,
-      address: receivedEntry.address.toLowerCase(),
-      txHash: transfer.txid,
-      eventIndex: 0,
-      amount: formatEther(receivedAmount),
-      confirmations,
-    });
 
     const processedEvent = await markWebhookEventProcessed({
       eventId: event.id,
@@ -226,7 +309,7 @@ const processBitGoTransferWebhookEvent = async ({ eventId }) => {
 
     return {
       event: processedEvent,
-      deposit,
+      ...result,
     };
   } catch (error) {
     if (!event) {
