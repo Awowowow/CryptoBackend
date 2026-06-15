@@ -1,4 +1,4 @@
-import prisma from "../Backend/config/prisma.js";
+import prisma from "../config/prisma.js";
 
 const assets = [
   {

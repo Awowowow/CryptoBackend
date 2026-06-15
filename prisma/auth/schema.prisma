@@ -111,6 +111,41 @@ enum DomainEventOutboxStatus {
   FAILED
 }
 
+enum TradingPairStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum TradeOrderSide {
+  BUY
+  SELL
+}
+
+enum TradeOrderType {
+  LIMIT
+  MARKET
+}
+
+enum TradeOrderStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum TradeOrderTimeInForce {
+  GTC
+  IOC
+  FOK
+}
+
+enum TradeLiquidityRole {
+  MAKER
+  TAKER
+}
+
 model Asset {
   id       String  @id @default(cuid())
   symbol   String  @unique @db.VarChar(20)
@@ -125,6 +160,18 @@ model Asset {
   ledgerEntries  LedgerEntry[]
   assetNetworks  AssetNetwork[]
   withdrawals    Withdrawal[]
+
+  baseTradingPairs  TradingPair[] @relation("TradingPairBaseAsset")
+  quoteTradingPairs TradingPair[] @relation("TradingPairQuoteAsset")
+
+  baseTradeOrders   TradeOrder[] @relation("TradeOrderBaseAsset")
+  quoteTradeOrders  TradeOrder[] @relation("TradeOrderQuoteAsset")
+  lockedTradeOrders TradeOrder[] @relation("TradeOrderLockedAsset")
+
+  baseTrades      Trade[] @relation("TradeBaseAsset")
+  quoteTrades     Trade[] @relation("TradeQuoteAsset")
+  buyerFeeTrades  Trade[] @relation("TradeBuyerFeeAsset")
+  sellerFeeTrades Trade[] @relation("TradeSellerFeeAsset")
 }
 
 model BlockchainNetwork {
@@ -298,6 +345,9 @@ model User {
   withdrawals            Withdrawal[]         @relation("UserWithdrawals")
   reviewedWithdrawals    Withdrawal[]         @relation("WithdrawalReviewedBy")
   withdrawalAuditLogs    WithdrawalAuditLog[] @relation("WithdrawalAuditActor")
+  tradeOrders            TradeOrder[]
+  buyTrades              Trade[]              @relation("TradeBuyer")
+  sellTrades             Trade[]              @relation("TradeSeller")
 }
 
 model TrustedDevice {
@@ -736,4 +786,136 @@ model DomainEventOutbox {
   @@index([aggregateType, aggregateId])
   @@index([eventType])
   @@index([publishedAt])
+}
+
+model TradingPair {
+  id String @id @default(cuid())
+
+  symbol String @unique @db.VarChar(40)
+
+  baseAssetId  String
+  quoteAssetId String
+
+  status TradingPairStatus @default(ACTIVE)
+
+  priceDecimals    Int @default(8)
+  quantityDecimals Int @default(8)
+
+  minBaseQuantity Decimal @default(0) @db.Decimal(36, 18)
+  minQuoteAmount  Decimal @default(0) @db.Decimal(36, 18)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  baseAsset  Asset @relation("TradingPairBaseAsset", fields: [baseAssetId], references: [id], onDelete: Restrict)
+  quoteAsset Asset @relation("TradingPairQuoteAsset", fields: [quoteAssetId], references: [id], onDelete: Restrict)
+
+  orders TradeOrder[]
+  trades Trade[]
+
+  @@unique([baseAssetId, quoteAssetId])
+  @@index([baseAssetId])
+  @@index([quoteAssetId])
+  @@index([status])
+}
+
+model TradeOrder {
+  id String @id @default(cuid())
+
+  userId        String
+  tradingPairId String
+  baseAssetId   String
+  quoteAssetId  String
+
+  side        TradeOrderSide
+  type        TradeOrderType
+  status      TradeOrderStatus      @default(OPEN)
+  timeInForce TradeOrderTimeInForce @default(GTC)
+
+  price Decimal? @db.Decimal(36, 18)
+
+  originalQuantity  Decimal @db.Decimal(36, 18)
+  filledQuantity    Decimal @default(0) @db.Decimal(36, 18)
+  remainingQuantity Decimal @db.Decimal(36, 18)
+
+  lockedAssetId  String
+  lockedAmount   Decimal @db.Decimal(36, 18)
+  releasedAmount Decimal @default(0) @db.Decimal(36, 18)
+
+  idempotencyKey String @unique @db.VarChar(180)
+
+  rejectedReason  String? @db.Text
+  cancelledReason String? @db.Text
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  filledAt    DateTime?
+  cancelledAt DateTime?
+  rejectedAt  DateTime?
+  expiredAt   DateTime?
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradingPair TradingPair @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
+  baseAsset   Asset       @relation("TradeOrderBaseAsset", fields: [baseAssetId], references: [id], onDelete: Restrict)
+  quoteAsset  Asset       @relation("TradeOrderQuoteAsset", fields: [quoteAssetId], references: [id], onDelete: Restrict)
+  lockedAsset Asset       @relation("TradeOrderLockedAsset", fields: [lockedAssetId], references: [id], onDelete: Restrict)
+
+  makerTrades Trade[] @relation("TradeMakerOrder")
+  takerTrades Trade[] @relation("TradeTakerOrder")
+
+  @@index([userId])
+  @@index([tradingPairId, side, status, price, createdAt])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Trade {
+  id String @id @default(cuid())
+
+  tradingPairId String
+  baseAssetId   String
+  quoteAssetId  String
+
+  makerOrderId String
+  takerOrderId String
+
+  buyerUserId  String
+  sellerUserId String
+
+  price    Decimal @db.Decimal(36, 18)
+  quantity Decimal @db.Decimal(36, 18)
+
+  quoteAmount Decimal @db.Decimal(36, 18)
+
+  buyerFeeAssetId  String?
+  buyerFeeAmount   Decimal @default(0) @db.Decimal(36, 18)
+  sellerFeeAssetId String?
+  sellerFeeAmount  Decimal @default(0) @db.Decimal(36, 18)
+
+  makerSide TradeOrderSide
+  takerSide TradeOrderSide
+
+  idempotencyKey String @unique @db.VarChar(180)
+
+  createdAt DateTime @default(now())
+
+  tradingPair TradingPair @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
+  baseAsset   Asset       @relation("TradeBaseAsset", fields: [baseAssetId], references: [id], onDelete: Restrict)
+  quoteAsset  Asset       @relation("TradeQuoteAsset", fields: [quoteAssetId], references: [id], onDelete: Restrict)
+
+  makerOrder TradeOrder @relation("TradeMakerOrder", fields: [makerOrderId], references: [id], onDelete: Restrict)
+  takerOrder TradeOrder @relation("TradeTakerOrder", fields: [takerOrderId], references: [id], onDelete: Restrict)
+
+  buyer  User @relation("TradeBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  seller User @relation("TradeSeller", fields: [sellerUserId], references: [id], onDelete: Restrict)
+
+  buyerFeeAsset  Asset? @relation("TradeBuyerFeeAsset", fields: [buyerFeeAssetId], references: [id], onDelete: Restrict)
+  sellerFeeAsset Asset? @relation("TradeSellerFeeAsset", fields: [sellerFeeAssetId], references: [id], onDelete: Restrict)
+
+  @@index([tradingPairId, createdAt])
+  @@index([buyerUserId])
+  @@index([sellerUserId])
+  @@index([makerOrderId])
+  @@index([takerOrderId])
+  @@index([createdAt])
 }

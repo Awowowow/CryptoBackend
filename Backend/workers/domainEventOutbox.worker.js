@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Client } from "pg";
 import { DomainEventOutboxStatus } from "@prisma/client";
 import prisma from "../config/prisma.js";
+import { disconnectKafkaProducer, publishDomainEventToKafka } from "../services/event-service/kafkaProducer.service.js";
 
 const OUTBOX_NOTIFY_CHANNEL = "domain_event_outbox_inserted";
 const OUTBOX_POLL_INTERVAL_MS = 60_000;
@@ -21,14 +22,15 @@ const getPostgresConnectionString = () => {
 };
 
 const publishOutboxEvent = async (event) => {
-  console.log("Publishing domain event:", {
-    id: event.id,
-    eventType: event.eventType,
-    aggregateType: event.aggregateType,
-    aggregateId: event.aggregateId,
-    payload: event.payload,
-  });
-};
+    console.log("Publishing domain event to Kafka:", {
+      id: event.id,
+      eventType: event.eventType,
+      aggregateType: event.aggregateType,
+      aggregateId: event.aggregateId,
+    });
+  
+    await publishDomainEventToKafka(event);
+  };
 
 const processOutboxBatch = async () => {
   if (isProcessingOutbox) {
@@ -153,6 +155,7 @@ const shutdown = async (signal) => {
 
   try {
     await pgClient.end();
+    await disconnectKafkaProducer();
     await prisma.$disconnect();
 
     console.log("Domain event outbox worker closed.");
