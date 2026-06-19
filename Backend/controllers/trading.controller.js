@@ -2,6 +2,7 @@ import { getOrderBook } from "../services/trading-service/orderBook.service.js";
 import { getRecentTrades } from "../services/trading-service/recentTrade.service.js";
 import { cancelTradeOrder, createTradeOrder, getUserTradeOrders } from "../services/trading-service/tradingOrder.service.js";
 import { getTradingPairs } from "../services/trading-service/tradingPair.service.js";
+import { getUserTrades } from "../services/trading-service/userTrade.service.js";
 import AppError from "../utils/AppError.js";
 import asyncWrapper from "../utils/asyncWrapper.js";
 
@@ -118,5 +119,26 @@ const getRecentTradesController = asyncWrapper(async(req, res) =>{
     });
 });
 
+const getMyTrades = asyncWrapper(async (req, res) => {
+    const userId = req.user.userId;
+    const { symbol, limit } = req.query;
+  
+    if (!userId) {
+      throw new AppError("Authenticated user is required", 401);
+    }
+  
+    const trades = await getUserTrades({
+      userId,
+      symbol,
+      limit,
+    });
+  
+    return res.status(200).json({
+      success: true,
+      message: "User trades fetched successfully",
+      data: trades,
+    });
+  });
 
-export { getTradingPairList, createOrder, getMyOrders, cancelOrder, getOrderBookController, getRecentTradesController };
+
+export { getTradingPairList, createOrder, getMyOrders, cancelOrder, getOrderBookController, getRecentTradesController, getMyTrades };
