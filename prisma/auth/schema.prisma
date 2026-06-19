@@ -810,8 +810,9 @@ model TradingPair {
   baseAsset  Asset @relation("TradingPairBaseAsset", fields: [baseAssetId], references: [id], onDelete: Restrict)
   quoteAsset Asset @relation("TradingPairQuoteAsset", fields: [quoteAssetId], references: [id], onDelete: Restrict)
 
-  orders TradeOrder[]
-  trades Trade[]
+  orders  TradeOrder[]
+  trades  Trade[]
+  candles MarketCandle[]
 
   @@unique([baseAssetId, quoteAssetId])
   @@index([baseAssetId])
@@ -918,4 +919,34 @@ model Trade {
   @@index([makerOrderId])
   @@index([takerOrderId])
   @@index([createdAt])
+}
+
+model MarketCandle {
+  id String @id @default(cuid())
+
+  tradingPairId String
+
+  interval String @db.VarChar(20)
+
+  openTime  DateTime
+  closeTime DateTime
+
+  open  Decimal @db.Decimal(36, 18)
+  high  Decimal @db.Decimal(36, 18)
+  low   Decimal @db.Decimal(36, 18)
+  close Decimal @db.Decimal(36, 18)
+
+  volume      Decimal @default(0) @db.Decimal(36, 18)
+  quoteVolume Decimal @default(0) @db.Decimal(36, 18)
+
+  tradeCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tradingPair TradingPair @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
+
+  @@unique([tradingPairId, interval, openTime])
+  @@index([tradingPairId, interval, openTime])
+  @@index([interval, openTime])
 }

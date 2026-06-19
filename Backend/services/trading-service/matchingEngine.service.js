@@ -9,6 +9,7 @@ import AppError from "../../utils/AppError.js";
 import { getOrCreateUserWalletAccounts } from "../wallet-ledger-service/walletAccount.service.js";
 import { toDecimal } from "../../utils/decimals.js";
 import { postLedgerTransaction } from "../wallet-ledger-service/ledger.service.js";
+import { createTradeExecutedDomainEvent } from "../event-service/tradeDomainEvent.service.js";
 
 const MATCHABLE_ORDER_STATUSES = [
   TradeOrderStatus.OPEN,
@@ -523,6 +524,12 @@ const executeSingleMatch = async ({ incomingOrder, oppositeOrder }) => {
       oppositeOrder,
       fillQuantity,
       tx,
+    });
+
+
+    await createTradeExecutedDomainEvent({
+        trade,
+        tx,
     });
 
     return {

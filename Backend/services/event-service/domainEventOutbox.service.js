@@ -8,6 +8,7 @@ const createDomainEventOutboxEntry = async ({
   aggregateId,
   idempotencyKey,
   payload,
+  tx = prisma,
 }) => {
   if (!eventType || typeof eventType !== "string") {
     throw new AppError("Domain event type is required", 400);
@@ -25,7 +26,7 @@ const createDomainEventOutboxEntry = async ({
     throw new AppError("Domain event idempotency key is required", 400);
   }
 
-  return prisma.domainEventOutbox.upsert({
+  return tx.domainEventOutbox.upsert({
     where: {
       idempotencyKey,
     },

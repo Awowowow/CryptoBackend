@@ -10,7 +10,7 @@ const formatRecentTrade = (trade) => {
     quoteAmount: trade.quoteAmount.toString(),
     makerSide: trade.makerSide,
     takerSide: trade.takerSide,
-    createdAt: trade.createdAt,
+    createdAt: trade.createdAt.toISOString(),
   };
 };
 

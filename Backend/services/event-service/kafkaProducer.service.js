@@ -6,8 +6,8 @@ const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || "localhost:9092")
   .map((broker) => broker.trim())
   .filter(Boolean);
 
-const WITHDRAWAL_EVENTS_TOPIC =
-  process.env.KAFKA_WITHDRAWAL_EVENTS_TOPIC || "cryptoex.withdrawal.events";
+const WITHDRAWAL_EVENTS_TOPIC = process.env.KAFKA_WITHDRAWAL_EVENTS_TOPIC || "cryptoex.withdrawal.events";
+const TRADE_EVENTS_TOPIC = process.env.KAFKA_TRADE_EVENTS_TOPIC || "cryptoex.trade.events";
 
 const kafka = new Kafka({
   clientId: KAFKA_CLIENT_ID,
@@ -41,7 +41,11 @@ const getTopicForDomainEvent = (event) => {
     return WITHDRAWAL_EVENTS_TOPIC;
   }
 
-  throw new Error(`Unsupported domain event aggregate type: ${event.aggregateType}`);
+  if (event.aggregateType === "Trade") {
+    return TRADE_EVENTS_TOPIC;
+  }
+
+throw new Error(`Unsupported domain event aggregate type: ${event.aggregateType}`);
 };
 
 const publishDomainEventToKafka = async (event) => {

@@ -1,3 +1,4 @@
+import { getMarketSummary } from "../services/trading-service/marketSummary.service.js";
 import { getOrderBook } from "../services/trading-service/orderBook.service.js";
 import { getRecentTrades } from "../services/trading-service/recentTrade.service.js";
 import { cancelTradeOrder, createTradeOrder, getUserTradeOrders } from "../services/trading-service/tradingOrder.service.js";
@@ -140,5 +141,19 @@ const getMyTrades = asyncWrapper(async (req, res) => {
     });
   });
 
+const getMarketSummaryController = asyncWrapper(async (req, res) => {
+    const { symbol } = req.query;
+  
+    const marketSummary = await getMarketSummary({
+      symbol,
+    });
+  
+    return res.status(200).json({
+      success: true,
+      message: "Market summary fetched successfully",
+      data: marketSummary,
+    });
+});
 
-export { getTradingPairList, createOrder, getMyOrders, cancelOrder, getOrderBookController, getRecentTradesController, getMyTrades };
+
+export { getTradingPairList, createOrder, getMyOrders, cancelOrder, getOrderBookController, getRecentTradesController, getMyTrades, getMarketSummaryController };
