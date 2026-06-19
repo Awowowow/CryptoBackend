@@ -1,5 +1,5 @@
 import express from "express";
-import { cancelOrder, createOrder, getMyOrders, getTradingPairList } from "../controllers/trading.controller.js";
+import { cancelOrder, createOrder, getMyOrders, getOrderBookController, getRecentTradesController, getTradingPairList } from "../controllers/trading.controller.js";
 import authentication from "../middleware/authentication.js";
 
 const tradingRouter = express.Router();
@@ -8,10 +8,12 @@ tradingRouter.get("/pairs", getTradingPairList);
 
 tradingRouter.get("/orders", authentication, getMyOrders);
 
+tradingRouter.get("/order-book", getOrderBookController);
+
+tradingRouter.get("/recent-trades", getRecentTradesController);
+
 tradingRouter.post("/orders",authentication, createOrder);
 
 tradingRouter.post("/orders/:orderId/cancel", authentication, cancelOrder);
 
-
-
-export default tradingRouter
+export default tradingRouter 
