@@ -4,14 +4,16 @@ import AppError from "../../utils/AppError.js";
 import { toDecimal } from "../../utils/decimals.js";
 
 
-const postLedgerTransaction = async ({
-  type,
-  idempotencyKey,
-  referenceType = null,
-  referenceId = null,
-  description = null,
-  entries,
-}) => {
+  const postLedgerTransaction = async ({
+    type,
+    idempotencyKey,
+    referenceType = null,
+    referenceId = null,
+    description = null,
+    entries,
+    tx = null,
+  }) => {
+    const db = tx ?? prisma;
   // Reject malformed ledger requests before touching financial state.
   if (!Object.values(LedgerTransactionType).includes(type)) {
     throw new AppError("Invalid ledger transaction type", 400);
@@ -70,7 +72,7 @@ const postLedgerTransaction = async ({
   }
 
   // Retries of the same business event must not post the same money movement twice.
-  const existingTransaction = await prisma.ledgerTransaction.findUnique({
+  const existingTransaction = await db.ledgerTransaction.findUnique({
     where: {
       idempotencyKey,
     },
@@ -88,7 +90,7 @@ const postLedgerTransaction = async ({
     (entry) => entry.walletAccountId
   );
 
-  const walletAccounts = await prisma.walletAccount.findMany({
+  const walletAccounts = await db.walletAccount.findMany({
     where: {
       id: {
         in: walletAccountIds,
@@ -154,8 +156,8 @@ const postLedgerTransaction = async ({
   }
 
   // Post immutable ledger history and update current balance snapshots atomically.
-  const ledgerTransaction = await prisma.$transaction(async (tx) => {
-    const createdTransaction = await tx.ledgerTransaction.create({
+  const writeLedgerTransaction = async (client) => {
+    const createdTransaction = await client.ledgerTransaction.create({
       data: {
         type,
         idempotencyKey,
@@ -164,8 +166,8 @@ const postLedgerTransaction = async ({
         description,
       },
     });
-
-    await tx.ledgerEntry.createMany({
+  
+    await client.ledgerEntry.createMany({
       data: normalizedEntries.map((entry) => ({
         ledgerTransactionId: createdTransaction.id,
         walletAccountId: entry.walletAccountId,
@@ -173,9 +175,9 @@ const postLedgerTransaction = async ({
         amount: entry.amount,
       })),
     });
-
+  
     for (const [walletAccountId, nextBalance] of nextBalancesByWalletAccountId) {
-      await tx.walletBalance.update({
+      await client.walletBalance.update({
         where: {
           walletAccountId,
         },
@@ -184,8 +186,8 @@ const postLedgerTransaction = async ({
         },
       });
     }
-
-    return tx.ledgerTransaction.findUnique({
+  
+    return client.ledgerTransaction.findUnique({
       where: {
         id: createdTransaction.id,
       },
@@ -193,9 +195,13 @@ const postLedgerTransaction = async ({
         entries: true,
       },
     });
-  });
-
-  return ledgerTransaction;
+  };
+  
+  if (tx) {
+    return writeLedgerTransaction(tx);
+  }
+  
+  return prisma.$transaction(writeLedgerTransaction);
 };
  
 export { postLedgerTransaction }; 

@@ -20,14 +20,14 @@ const sendVerificationEmail = async (email, token) => {
   const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
 
   await transporter.sendMail({
-    from: `"Crypto App" <${process.env.EMAIL_USER}>`,
+    from: `"CryptoEx" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: "Verify your email",
+    subject: "Verify your CryptoEx account",
     html: `
-      <h2>Email Verification</h2>
-      <p>Click below to verify your email:</p>
-      <a href="${verifyUrl}">${verifyUrl}</a>
-      <p>This link expires in 15 minutes.</p>
+      <p>Hi,</p>
+      <p>Welcome to CryptoEx. Please verify your email to activate your account.</p>
+      <p><a href="${verifyUrl}">Verify email address</a></p>
+      <p>If you did not create this account, you can ignore this email.</p>
     `,
   });
 };
@@ -49,5 +49,4 @@ const sendPasswordResetEmail = async (email, token) => {
   });
 };
 
-
-export { sendVerificationEmail,sendPasswordResetEmail };
+export { sendVerificationEmail, sendPasswordResetEmail };
