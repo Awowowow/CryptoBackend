@@ -146,6 +146,11 @@ enum TradeLiquidityRole {
   TAKER
 }
 
+enum MarketCandleSource {
+  EXCHANGE_TRADES
+  REFERENCE_MARKET
+}
+
 model Asset {
   id       String  @id @default(cuid())
   symbol   String  @unique @db.VarChar(20)
@@ -925,6 +930,7 @@ model MarketCandle {
   id String @id @default(cuid())
 
   tradingPairId String
+  source        MarketCandleSource @default(EXCHANGE_TRADES)
 
   interval String @db.VarChar(20)
 
@@ -946,7 +952,7 @@ model MarketCandle {
 
   tradingPair TradingPair @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
 
-  @@unique([tradingPairId, interval, openTime])
-  @@index([tradingPairId, interval, openTime])
-  @@index([interval, openTime])
+  @@unique([tradingPairId, source, interval, openTime])
+  @@index([tradingPairId, source, interval, openTime])
+  @@index([source, interval, openTime])
 }

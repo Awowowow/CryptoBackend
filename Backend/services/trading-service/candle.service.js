@@ -70,20 +70,22 @@ const updateSingleCandleFromTrade = async ({ tradeEvent, interval }) => {
   const quantity = toDecimal(tradeEvent.quantity, "Trade quantity");
   const quoteAmount = toDecimal(tradeEvent.quoteAmount, "Trade quote amount");
 
-  const existingCandle = await prisma.marketCandle.findUnique({
+const existingCandle = await prisma.marketCandle.findUnique({
     where: {
-      tradingPairId_interval_openTime: {
+      tradingPairId_source_interval_openTime: {
         tradingPairId: tradeEvent.tradingPairId,
+        source: MarketCandleSource.EXCHANGE_TRADES,
         interval,
         openTime,
       },
     },
-  });
+});
 
   if (!existingCandle) {
     return prisma.marketCandle.create({
       data: {
         tradingPairId: tradeEvent.tradingPairId,
+        source: MarketCandleSource.EXCHANGE_TRADES,
         interval,
         openTime,
         closeTime,
