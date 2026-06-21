@@ -161,13 +161,14 @@ const getMarketSummaryController = asyncWrapper(async (req, res) => {
 });
 
 const getMarketCandlesController = asyncWrapper(async (req, res) => {
-  const { symbol, interval, range } = req.query;
-
-  const marketCandles = await getMarketCandles({
-    symbol,
-    interval,
-    range,
-  });
+    const { symbol, interval, range, source } = req.query;
+    
+    const marketCandles = await getMarketCandles({
+        symbol,
+        interval,
+        range,
+        source,
+    });
 
   return res.status(200).json({
     success: true,

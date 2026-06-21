@@ -155,7 +155,8 @@ const projectMarketEvent = async ({ marketEvent }) => {
 };
 
 export {
-  getMarketTickerCacheKey,
-  projectTickerMarketEvent,
-  projectMarketEvent
-};
+    getMarketTickerCacheKey,
+    projectCandleMarketEvent,
+    projectTickerMarketEvent,
+    projectMarketEvent,
+  };

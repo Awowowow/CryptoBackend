@@ -88,6 +88,16 @@ const normalizeCandleInterval = (interval) => {
   return normalizedInterval;
 };
 
+const normalizeCandleSource = (source) => {
+  const normalizedSource = source || MarketCandleSource.REFERENCE_MARKET;
+
+  if (!Object.values(MarketCandleSource).includes(normalizedSource)) {
+    throw new AppError("Unsupported candle source", 400);
+  }
+
+  return normalizedSource;
+};
+
 const normalizeCandleRange = (range) => {
   const normalizedRange = range || DEFAULT_CANDLE_RANGE;
 
@@ -242,11 +252,12 @@ const getMarketCandles = async ({
   symbol,
   interval,
   range,
-  source = MarketCandleSource.EXCHANGE_TRADES,
+  source = MarketCandleSource.REFERENCE_MARKET,
 }) => {
   const normalizedSymbol = normalizeTradingPairSymbol(symbol);
   const normalizedInterval = normalizeCandleInterval(interval);
   const normalizedRange = normalizeCandleRange(range);
+  const normalizedSource = normalizeCandleSource(source);
 
   const toTime = new Date();
 
@@ -278,7 +289,7 @@ const getMarketCandles = async ({
 
   const where = {
     tradingPairId: tradingPair.id,
-    source,
+    source: normalizedSource,
     interval: normalizedInterval,
     openTime: fromTime ? {gte: fromTime,lte: toTime,} : {lte: toTime,},
   };
@@ -302,7 +313,7 @@ const getMarketCandles = async ({
     symbol: tradingPair.symbol,
     interval: normalizedInterval,
     range: normalizedRange,
-    source,
+    source: normalizedSource,
     baseAsset: {
       id: tradingPair.baseAsset.id,
       symbol: tradingPair.baseAsset.symbol,
