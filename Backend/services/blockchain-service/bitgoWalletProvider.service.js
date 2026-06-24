@@ -10,8 +10,23 @@ const getRequiredEnv = (name) => {
   return value;
 };
 
+const BITGO_NETWORK_CONFIG = Object.freeze({
+  ETH_HOODI: {
+    coinEnv: "BITGO_ETH_TEST_COIN",
+    walletIdEnv: "BITGO_ETH_WALLET_ID",
+    walletPassphraseEnv: "BITGO_WALLET_PASSPHRASE",
+  },
+  BTC_TESTNET: {
+    coin: "tbtc",
+    walletIdEnv: "BITGO_TBTC_WALLET_ID",
+    walletPassphraseEnv: "BITGO_TBTC_WALLET_PASSPHRASE",
+  },
+});
+
 const getBitGoWalletConfig = (networkCode) => {
-  if (networkCode !== "ETH_HOODI") {
+  const config = BITGO_NETWORK_CONFIG[networkCode];
+
+  if (!config) {
     throw new AppError(
       "BitGo is not configured for this network",
       400
@@ -19,8 +34,9 @@ const getBitGoWalletConfig = (networkCode) => {
   }
 
   return {
-    coin: getRequiredEnv("BITGO_ETH_TEST_COIN"),
-    walletId: getRequiredEnv("BITGO_ETH_WALLET_ID"),
+    coin: config.coin ?? getRequiredEnv(config.coinEnv),
+    walletId: getRequiredEnv(config.walletIdEnv),
+    walletPassphraseEnv: config.walletPassphraseEnv,
   };
 };
 
@@ -87,11 +103,7 @@ const sendBitGoWithdrawal = async ({
     throw new AppError("BitGo withdrawal address is required", 400);
   }
 
-  if (
-    !amountBaseUnits ||
-    typeof amountBaseUnits !== "string" ||
-    !/^\d+$/.test(amountBaseUnits)
-  ) {
+  if (!amountBaseUnits || typeof amountBaseUnits !== "string" || !/^\d+$/.test(amountBaseUnits)) {
     throw new AppError("BitGo withdrawal amount is invalid", 400);
   }
 
@@ -101,13 +113,13 @@ const sendBitGoWithdrawal = async ({
     throw new AppError("BitGo withdrawal address is required", 400);
   }
 
-  const { coin, walletId } = getBitGoWalletConfig(networkCode);
+  const { coin, walletId, walletPassphraseEnv } = getBitGoWalletConfig(networkCode);
 
   const body = {
     address: normalizedAddress,
     amount: amountBaseUnits,
     type: "transfer",
-    walletPassphrase: getRequiredEnv("BITGO_WALLET_PASSPHRASE"),
+    walletPassphrase: getRequiredEnv(walletPassphraseEnv),
   };
 
   if (comment) {

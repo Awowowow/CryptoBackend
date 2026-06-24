@@ -8,6 +8,7 @@ import { finalizeSubmittedWithdrawal } from "../wallet-ledger-service/withdrawal
 
 const BITGO_COIN_NETWORK_MAP = Object.freeze({
   hteth: "ETH_HOODI",
+  tbtc: "BTC_TESTNET",
 });
 
 const getNetworkCodeFromBitGoCoin = (coin) => {

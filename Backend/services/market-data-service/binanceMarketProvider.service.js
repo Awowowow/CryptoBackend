@@ -29,7 +29,8 @@ const getOptionalBinanceTimestamp = (value, fieldName) => {
   };
 
 const BINANCE_STREAM_SYMBOL_BY_TRADING_PAIR = Object.freeze({
-  "ETH-USDT": "ethusdt",
+    "ETH-USDT": "ethusdt",
+    "BTC-USDT": "btcusdt",
 });
 
 const getBinanceStreamSymbol = (symbol) => {

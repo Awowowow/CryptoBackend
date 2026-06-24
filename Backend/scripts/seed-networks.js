@@ -1,33 +1,42 @@
 import prisma from "../config/prisma.js";
 
 const networks = [
-    {
-      code: "BTC",
-      name: "Bitcoin",
-    },
-    {
-      code: "ETH_HOODI",
-      name: "Ethereum Hoodi",
-    },
-  ];
-  
+  {
+    code: "BTC",
+    name: "Bitcoin",
+  },
+  {
+    code: "BTC_TESTNET",
+    name: "Bitcoin Testnet",
+  },
+  {
+    code: "ETH_HOODI",
+    name: "Ethereum Hoodi",
+  },
+];
+
 const assetNetworks = [
-    {
-      assetSymbol: "BTC",
-      networkCode: "BTC",
-      minConfirmations: 3,
-    },
-    {
-      assetSymbol: "ETH",
-      networkCode: "ETH_HOODI",
-      minConfirmations: 12,
-    },
-    {
-      assetSymbol: "USDT",
-      networkCode: "ETH_HOODI",
-      minConfirmations: 12,
-    },
-  ];
+  {
+    assetSymbol: "BTC",
+    networkCode: "BTC",
+    minConfirmations: 3,
+  },
+  {
+    assetSymbol: "BTC",
+    networkCode: "BTC_TESTNET",
+    minConfirmations: 1,
+  },
+  {
+    assetSymbol: "ETH",
+    networkCode: "ETH_HOODI",
+    minConfirmations: 12,
+  },
+  {
+    assetSymbol: "USDT",
+    networkCode: "ETH_HOODI",
+    minConfirmations: 12,
+  },
+];
 
 
 const seedNetworks = async () => {

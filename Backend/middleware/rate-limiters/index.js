@@ -1,4 +1,5 @@
-import { createSlidingWindowCounterLimiter } from "./slidingWindowCounter.js";
+import { createSlidingWindowCounterLimiter } from "../slidingWindowCounter.js";
+import { createTokenBucketLimiter } from "../tokenBucket.js";
 
 // Auth
 
@@ -87,6 +88,15 @@ const withdrawalCreateRateLimiter = createSlidingWindowCounterLimiter({
   failClosed: true,
 });
 
+const depositAddressRateLimiter = createSlidingWindowCounterLimiter({
+  name: "deposit-address",
+  windowMs: 60 * 60 * 1000,
+  maxRequests: 30,
+  keyGenerator: (req) => req.user?.userId || req.ip,
+  message: "Too many deposit address requests. Please try again later.",
+  failClosed: true,
+});
+
 // Trading
 
 const tradeOrderCreateRateLimiter = createSlidingWindowCounterLimiter({
@@ -109,6 +119,27 @@ const adminActionRateLimiter = createSlidingWindowCounterLimiter({
   failClosed: true,
 });
 
+
+const marketReadRateLimiter = createTokenBucketLimiter({
+  name: "market-read",
+  capacity: 120,
+  refillTokens: 120,
+  refillIntervalMs: 60 * 1000,
+  keyGenerator: (req) => req.user?.userId || req.ip,
+  message: "Too many market requests. Please slow down.",
+  failClosed: false,
+});
+
+const tradingReadRateLimiter = createTokenBucketLimiter({
+  name: "trading-read",
+  capacity: 120,
+  refillTokens: 120,
+  refillIntervalMs: 60 * 1000,
+  keyGenerator: (req) => req.user?.userId || req.ip,
+  message: "Too many trading data requests. Please slow down.",
+  failClosed: false,
+});
+
 export {
   adminActionRateLimiter,
   emailVerifyRateLimiter,
@@ -121,4 +152,7 @@ export {
   tradeOrderCreateRateLimiter,
   twoFaVerifyRateLimiter,
   withdrawalCreateRateLimiter,
+  depositAddressRateLimiter,
+  marketReadRateLimiter,
+  tradingReadRateLimiter
 };

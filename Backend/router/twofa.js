@@ -8,14 +8,15 @@ import {
   deleteTrustedDevice,
   getTrustedDevices
 } from "../controllers/twofa.controller.js";
+import { twoFaVerifyRateLimiter } from "../middleware/rate-limiters/index.js";
 
 const twofaRouter = express.Router();
 
-twofaRouter.post("/verify-login" ,verifyLogin);
+twofaRouter.post("/verify-login" , twoFaVerifyRateLimiter ,verifyLogin);
 
 twofaRouter.post("/setup",authentication, setup);
 
-twofaRouter.post("/verify-setup",authentication, verifySetup);
+twofaRouter.post("/verify-setup",authentication, twoFaVerifyRateLimiter , verifySetup);
 
 twofaRouter.post("/verify-recent", authentication, verifyRecent);
 
