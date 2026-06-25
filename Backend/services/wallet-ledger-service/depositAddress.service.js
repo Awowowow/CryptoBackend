@@ -22,7 +22,11 @@ const formatDepositAddress = (depositAddress) => {
   };
 };
 
-const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
+const getOrCreateDepositAddress = async ({
+  userId,
+  assetSymbol,
+  networkCode,
+}) => {
   if (!assetSymbol || typeof assetSymbol !== "string") {
     throw new AppError("Asset symbol is required", 400);
   }
@@ -33,6 +37,16 @@ const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
     throw new AppError("Asset symbol is required", 400);
   }
 
+  if (!networkCode || typeof networkCode !== "string") {
+    throw new AppError("Network code is required", 400);
+  }
+  
+  const normalizedNetworkCode = networkCode.trim().toUpperCase();
+  
+  if (!normalizedNetworkCode) {
+    throw new AppError("Network code is required", 400);
+  }
+
   const assetNetwork = await prisma.assetNetwork.findFirst({
     where: {
       asset: {
@@ -40,6 +54,7 @@ const getOrCreateDepositAddress = async ({ userId, assetSymbol }) => {
         isActive: true,
       },
       network: {
+        code: normalizedNetworkCode,
         isActive: true,
       },
       depositEnabled: true,

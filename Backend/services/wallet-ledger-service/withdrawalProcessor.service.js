@@ -14,9 +14,11 @@ const WITHDRAWAL_FINALIZER_COMPLETED_STATUSES = new Set([
   WithdrawalStatus.CANCELLED,
 ]);
 
-const toEthBaseUnits = ({ amount, decimals }) => {
+const toAssetBaseUnits = ({ amount, decimals }) => {
   const normalizedAmount =
-    typeof amount?.toString === "function" ? amount.toString() : String(amount);
+    typeof amount?.toString === "function"
+      ? amount.toString()
+      : String(amount);
 
   return parseUnits(normalizedAmount, decimals).toString();
 };
@@ -58,7 +60,7 @@ const getBitGoWithdrawalResultIds = (bitgoResult) => {
         bitgoResult.txHash ??
         null,
     };
-  };
+};
 
 const processApprovedWithdrawal = async ({ withdrawalId }) => {
   const withdrawal = await prisma.withdrawal.findUnique({
@@ -94,7 +96,7 @@ const processApprovedWithdrawal = async ({ withdrawalId }) => {
   });
 
   try {
-    const amountBaseUnits = toEthBaseUnits({
+    const amountBaseUnits = toAssetBaseUnits({
       amount: processingWithdrawal.amount,
       decimals: withdrawal.asset.decimals,
     });
@@ -184,7 +186,6 @@ const processApprovedWithdrawal = async ({ withdrawalId }) => {
       throw error;
     }
 };
-
 
 const getNextWithdrawalStatusFromTransfer = ({ transfer, withdrawal }) => {
     const state = String(transfer.state || "").toLowerCase();

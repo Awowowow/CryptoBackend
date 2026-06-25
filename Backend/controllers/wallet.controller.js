@@ -15,21 +15,23 @@ const getWalletBalance = asyncWrapper(async (req, res) => {
     }); 
 });
 
-const getDepositAddress = asyncWrapper(async (req,res) =>{
+const getDepositAddress = asyncWrapper(async (req, res) => {
     const userId = req.user.userId;
     const { assetSymbol } = req.params;
-
+    const { networkCode } = req.query;
+  
     const depositAddress = await getOrCreateDepositAddress({
-        userId,
-        assetSymbol
+      userId,
+      assetSymbol,
+      networkCode,
     });
-
-    res.status(200).json({
-        success: true,
-        message: "Deposit address fetched successfully",
-        data: depositAddress,
-    })
-})
+  
+    return res.status(200).json({
+      success: true,
+      message: "Deposit address fetched successfully",
+      data: depositAddress,
+    });
+  });
 
 const getWalletDeposits = asyncWrapper(async (req,res) =>{
     const userId = req.user.userId;

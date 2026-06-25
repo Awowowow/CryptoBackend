@@ -16,6 +16,46 @@ const assets = [
     name: "Tether",
     decimals: 6,
   },
+  {
+    symbol: "SOL",
+    name: "Solana",
+    decimals: 9,
+  },
+  {
+    symbol: "BNB",
+    name: "BNB",
+    decimals: 18,
+  },
+  {
+    symbol: "XRP",
+    name: "XRP",
+    decimals: 6,
+  },
+  {
+    symbol: "ADA",
+    name: "Cardano",
+    decimals: 6,
+  },
+  {
+    symbol: "DOGE",
+    name: "Dogecoin",
+    decimals: 8,
+  },
+  {
+    symbol: "TRX",
+    name: "TRON",
+    decimals: 6,
+  },
+  {
+    symbol: "LINK",
+    name: "Chainlink",
+    decimals: 18,
+  },
+  {
+    symbol: "BCH",
+    name: "Bitcoin Cash",
+    decimals: 8,
+  },
 ];
 
 const seedAssets = async () => {

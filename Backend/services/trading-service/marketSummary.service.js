@@ -1,7 +1,9 @@
 import prisma from "../../config/prisma.js";
+import redisClient from "../../config/redis.js";
 import AppError from "../../utils/AppError.js";
 import { normalizeTradingPairSymbol } from "../../utils/consts.js";
 import { toDecimal } from "../../utils/decimals.js";
+import { getMarketTickerCacheKey } from "../market-data-service/marketProjection.service.js";
 
 
 const MARKET_SUMMARY_WINDOW_HOURS = 24;
@@ -85,6 +87,56 @@ const formatDecimalOrNull = (value) => {
   return value ? value.toString() : null;
 };
 
+const getReferenceTickerSnapshot = async ({ symbol }) => {
+  const redisKey = getMarketTickerCacheKey(symbol);
+
+  const rawTickerSnapshot = await redisClient.get(redisKey);
+
+  if (!rawTickerSnapshot) {
+    return null;
+  }
+
+  return JSON.parse(rawTickerSnapshot);
+};
+
+const buildReferenceMarketSummary = ({
+  tradingPair,
+  tickerSnapshot,
+  windowStart,
+  now,
+}) => {
+  return {
+    symbol: tradingPair.symbol,
+    baseAsset: {
+      id: tradingPair.baseAsset.id,
+      symbol: tradingPair.baseAsset.symbol,
+      name: tradingPair.baseAsset.name,
+      decimals: tradingPair.baseAsset.decimals,
+    },
+    quoteAsset: {
+      id: tradingPair.quoteAsset.id,
+      symbol: tradingPair.quoteAsset.symbol,
+      name: tradingPair.quoteAsset.name,
+      decimals: tradingPair.quoteAsset.decimals,
+    },
+    window: {
+      hours: MARKET_SUMMARY_WINDOW_HOURS,
+      from: windowStart,
+      to: now,
+    },
+    lastPrice: tickerSnapshot.lastPrice ?? null,
+    highPrice: tickerSnapshot.high24h ?? null,
+    lowPrice: tickerSnapshot.low24h ?? null,
+    baseVolume: tickerSnapshot.baseVolume24h ?? "0",
+    quoteVolume: tickerSnapshot.quoteVolume24h ?? "0",
+    priceChange: tickerSnapshot.priceChange ?? null,
+    priceChangePercent: tickerSnapshot.priceChangePercent ?? null,
+    tradeCount: 0,
+    source: "REFERENCE_MARKET",
+  };
+};
+
+
 const getMarketSummary = async ({ symbol }) => {
   const normalizedSymbol = normalizeTradingPairSymbol(symbol);
   const windowStart = getMarketSummaryWindowStart();
@@ -136,6 +188,21 @@ const getMarketSummary = async ({ symbol }) => {
   const stats = calculateMarketStats({
     trades: tradesInWindow,
   });
+
+  if (!lastTrade && tradesInWindow.length === 0) {
+    const tickerSnapshot = await getReferenceTickerSnapshot({
+      symbol: tradingPair.symbol,
+    });
+  
+    if (tickerSnapshot) {
+      return buildReferenceMarketSummary({
+        tradingPair,
+        tickerSnapshot,
+        windowStart,
+        now,
+      });
+    }
+  }
 
   const lastPrice = lastTrade
     ? toDecimal(lastTrade.price, "Last price")

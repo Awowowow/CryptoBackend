@@ -1,5 +1,5 @@
 import { CustodyProviderType, CustodyWebhookEventStatus } from "@prisma/client";
-import { formatEther } from "ethers";
+import { formatUnits } from "ethers";
 import prisma from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { processDetectedDeposit } from "../wallet-ledger-service/deposit.service.js";
@@ -10,6 +10,15 @@ const BITGO_COIN_NETWORK_MAP = Object.freeze({
   hteth: "ETH_HOODI",
   tbtc: "BTC_TESTNET",
 });
+
+const NETWORK_NATIVE_ASSET_DECIMALS = Object.freeze({
+  ETH_HOODI: 18,
+  BTC_TESTNET: 8,
+});
+
+const CASE_INSENSITIVE_ADDRESS_NETWORKS = new Set([
+  "ETH_HOODI",
+]);
 
 const getNetworkCodeFromBitGoCoin = (coin) => {
   const normalizedCoin = coin.trim().toLowerCase();
@@ -29,6 +38,40 @@ const parseBitGoIntegerAmount = (valueString) => {
   }
 
   return BigInt(valueString);
+};
+
+const formatBitGoTransferAmount = ({networkCode,amountBaseUnits,}) => {
+  const decimals = NETWORK_NATIVE_ASSET_DECIMALS[networkCode];
+
+  if (!Number.isInteger(decimals)) {
+    throw new AppError(
+      `Asset decimals are not configured for network ${networkCode}`,
+      400
+    );
+  }
+
+  return formatUnits(amountBaseUnits, decimals);
+};
+
+const normalizeCustodyDepositAddress = ({
+  networkCode,
+  address,
+}) => {
+  if (!address || typeof address !== "string") {
+    throw new AppError("Custody deposit address is required", 400);
+  }
+
+  const trimmedAddress = address.trim();
+
+  if (!trimmedAddress) {
+    throw new AppError("Custody deposit address is required", 400);
+  }
+
+  if (CASE_INSENSITIVE_ADDRESS_NETWORKS.has(networkCode)) {
+    return trimmedAddress.toLowerCase();
+  }
+
+  return trimmedAddress;
 };
 
 const getReceivedTransferEntry = (transfer) => {
@@ -197,10 +240,13 @@ const processBitGoReceiveTransferWebhook = async ({
 
   const deposit = await processDetectedDeposit({
     networkCode,
-    address: receivedEntry.address.toLowerCase(),
+    address: normalizeCustodyDepositAddress({networkCode, address: receivedEntry.address}),
     txHash: transfer.txid,
     eventIndex: 0,
-    amount: formatEther(receivedAmount),
+    amount: formatBitGoTransferAmount({
+      networkCode,
+      amountBaseUnits: receivedAmount,
+    }),
     confirmations,
   });
 

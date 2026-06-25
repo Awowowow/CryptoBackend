@@ -28,9 +28,17 @@ const getOptionalBinanceTimestamp = (value, fieldName) => {
     return date.getTime();
   };
 
-const BINANCE_STREAM_SYMBOL_BY_TRADING_PAIR = Object.freeze({
+  const BINANCE_STREAM_SYMBOL_BY_TRADING_PAIR = Object.freeze({
     "ETH-USDT": "ethusdt",
     "BTC-USDT": "btcusdt",
+    "SOL-USDT": "solusdt",
+    "BNB-USDT": "bnbusdt",
+    "XRP-USDT": "xrpusdt",
+    "ADA-USDT": "adausdt",
+    "DOGE-USDT": "dogeusdt",
+    "TRX-USDT": "trxusdt",
+    "LINK-USDT": "linkusdt",
+    "BCH-USDT": "bchusdt",
 });
 
 const getBinanceStreamSymbol = (symbol) => {
