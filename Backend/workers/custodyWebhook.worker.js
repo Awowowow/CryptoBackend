@@ -4,7 +4,10 @@ import {
   CUSTODY_WEBHOOK_JOB_NAMES,
   redisConnection,
 } from "../queues/custodyWebhook.queue.js";
-import { processBitGoTransferWebhookEvent } from "../services/custody-service/custodyWebhookProcessor.service.js";
+import {
+  finalizeBitGoDepositFromWebhookEvent,
+  processBitGoTransferWebhookEvent,
+} from "../services/custody-service/custodyWebhookProcessor.service.js";
 
 const CUSTODY_WEBHOOK_QUEUE_NAME = "custody-webhook-processing";
 
@@ -13,7 +16,12 @@ let isShuttingDown = false;
 const custodyWebhookWorker = new Worker(
   CUSTODY_WEBHOOK_QUEUE_NAME,
   async (job) => {
-    if (job.name !== CUSTODY_WEBHOOK_JOB_NAMES.PROCESS_BITGO_TRANSFER_WEBHOOK) {
+    const supportedJobNames = new Set([
+      CUSTODY_WEBHOOK_JOB_NAMES.PROCESS_BITGO_TRANSFER_WEBHOOK,
+      CUSTODY_WEBHOOK_JOB_NAMES.FINALIZE_BITGO_DEPOSIT,
+    ]);
+
+    if (!supportedJobNames.has(job.name)) {
       throw new Error(`Unsupported custody webhook job: ${job.name}`);
     }
 
@@ -29,6 +37,12 @@ const custodyWebhookWorker = new Worker(
       attempt: job.attemptsMade + 1,
     });
 
+    if (job.name === CUSTODY_WEBHOOK_JOB_NAMES.FINALIZE_BITGO_DEPOSIT) {
+      return finalizeBitGoDepositFromWebhookEvent({
+        eventId,
+      });
+    }
+
     const result = await processBitGoTransferWebhookEvent({
       eventId,
     });
@@ -39,6 +53,7 @@ const custodyWebhookWorker = new Worker(
       resourceType: result.resourceType,
       depositId: result.deposit?.id ?? null,
       withdrawalId: result.withdrawal?.withdrawalId ?? null,
+      followUp: result.followUp ?? null,
     };
   },
   {

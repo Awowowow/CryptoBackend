@@ -22,4 +22,32 @@ const enqueueCustodyWebhookProcessingJob = async ({ eventId }) => {
   );
 };
 
-export { enqueueCustodyWebhookProcessingJob };
+const enqueueBitGoDepositFinalizationJob = async ({
+  eventId,
+  delayMs = 0,
+}) => {
+  const jobIdSuffix = delayMs > 0 ? Date.now() : "initial";
+
+  return custodyWebhookQueue.add(
+    CUSTODY_WEBHOOK_JOB_NAMES.FINALIZE_BITGO_DEPOSIT,
+    {
+      eventId,
+    },
+    {
+      jobId: `custody-webhook-finalize-deposit-${eventId}-${jobIdSuffix}`,
+      delay: delayMs,
+      attempts: 20,
+      backoff: {
+        type: "exponential",
+        delay: 10000,
+      },
+      removeOnComplete: 1000,
+      removeOnFail: 5000,
+    }
+  );
+};
+
+export {
+  enqueueBitGoDepositFinalizationJob,
+  enqueueCustodyWebhookProcessingJob,
+};

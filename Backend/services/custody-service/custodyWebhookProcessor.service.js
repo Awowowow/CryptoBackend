@@ -1,10 +1,15 @@
-import { CustodyProviderType, CustodyWebhookEventStatus } from "@prisma/client";
+import {
+  CustodyProviderType,
+  CustodyWebhookEventStatus,
+  DepositStatus,
+} from "@prisma/client";
 import { formatUnits } from "ethers";
 import prisma from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { processDetectedDeposit } from "../wallet-ledger-service/deposit.service.js";
 import { getCustodyTransfer } from "./custodyProvider.service.js";
 import { finalizeSubmittedWithdrawal } from "../wallet-ledger-service/withdrawalProcessor.service.js";
+import { enqueueBitGoDepositFinalizationJob } from "../../jobs/custodyWebhookJob.service.js";
 
 const BITGO_COIN_NETWORK_MAP = Object.freeze({
   hteth: "ETH_HOODI",
@@ -15,6 +20,15 @@ const NETWORK_NATIVE_ASSET_DECIMALS = Object.freeze({
   ETH_HOODI: 18,
   BTC_TESTNET: 8,
 });
+
+const DEPOSIT_FINALIZER_RECHECK_DELAY_MS = Number(
+  process.env.DEPOSIT_FINALIZER_RECHECK_DELAY_MS || 30_000
+);
+
+const DEPOSIT_FINALIZER_COMPLETED_STATUSES = new Set([
+  DepositStatus.CREDITED,
+  DepositStatus.REJECTED,
+]);
 
 const CASE_INSENSITIVE_ADDRESS_NETWORKS = new Set([
   "ETH_HOODI",
@@ -213,6 +227,67 @@ const fetchTransferForBitGoWebhookEvent = async ({ eventId }) => {
   };
 };
 
+const getBitGoWebhookEventForFinalization = async ({ eventId }) => {
+  const event = await prisma.custodyWebhookEvent.findUnique({
+    where: {
+      id: eventId,
+    },
+  });
+
+  if (!event) {
+    throw new AppError("Custody webhook event not found", 404);
+  }
+
+  if (event.provider !== CustodyProviderType.BITGO) {
+    throw new AppError("Unsupported custody webhook provider", 400);
+  }
+
+  if (event.eventType !== "transfer") {
+    throw new AppError("Unsupported custody webhook event type", 400);
+  }
+
+  if (!event.coin || !event.transferId) {
+    throw new AppError("Custody webhook transfer details are missing", 400);
+  }
+
+  if (event.status === CustodyWebhookEventStatus.REJECTED) {
+    throw new AppError("Custody webhook event was rejected", 409);
+  }
+
+  const networkCode = getNetworkCodeFromBitGoCoin(event.coin);
+
+  return {
+    event,
+    networkCode,
+  };
+};
+
+const scheduleDepositFinalizerIfNeeded = async ({ eventId, deposit }) => {
+  if (!deposit) {
+    return {
+      scheduled: false,
+      reason: "Deposit result is missing",
+    };
+  }
+
+  if (DEPOSIT_FINALIZER_COMPLETED_STATUSES.has(deposit.status)) {
+    return {
+      scheduled: false,
+      reason: `Deposit status is terminal: ${deposit.status}`,
+    };
+  }
+
+  await enqueueBitGoDepositFinalizationJob({
+    eventId,
+    delayMs: DEPOSIT_FINALIZER_RECHECK_DELAY_MS,
+  });
+
+  return {
+    scheduled: true,
+    delayMs: DEPOSIT_FINALIZER_RECHECK_DELAY_MS,
+  };
+};
+
 const processBitGoReceiveTransferWebhook = async ({
   event,
   networkCode,
@@ -354,8 +429,17 @@ const processBitGoTransferWebhookEvent = async ({ eventId }) => {
       eventId: event.id,
     });
 
+    const followUp =
+      result?.resourceType === "deposit"
+        ? await scheduleDepositFinalizerIfNeeded({
+            eventId: event.id,
+            deposit: result.deposit,
+          })
+        : null;
+
     return {
       event: processedEvent,
+      followUp,
       ...result,
     };
   } catch (error) {
@@ -385,4 +469,49 @@ const processBitGoTransferWebhookEvent = async ({ eventId }) => {
   }
 };
 
-export { fetchTransferForBitGoWebhookEvent, processBitGoTransferWebhookEvent };
+const finalizeBitGoDepositFromWebhookEvent = async ({ eventId }) => {
+  const { event, networkCode } = await getBitGoWebhookEventForFinalization({
+    eventId,
+  });
+
+  const transfer = await getCustodyTransfer({
+    provider: CustodyProviderType.BITGO,
+    networkCode,
+    transferId: event.transferId,
+  });
+
+  if (transfer.type !== "receive") {
+    return {
+      skipped: true,
+      reason: `Transfer type is ${transfer.type}`,
+      eventId: event.id,
+    };
+  }
+
+  const result = await processBitGoReceiveTransferWebhook({
+    event,
+    networkCode,
+    transfer,
+  });
+
+  const followUp = await scheduleDepositFinalizerIfNeeded({
+    eventId: event.id,
+    deposit: result.deposit,
+  });
+
+  return {
+    skipped: false,
+    eventId: event.id,
+    resourceType: result.resourceType,
+    depositId: result.deposit.id,
+    status: result.deposit.status,
+    confirmations: result.deposit.confirmations,
+    followUp,
+  };
+};
+
+export {
+  fetchTransferForBitGoWebhookEvent,
+  finalizeBitGoDepositFromWebhookEvent,
+  processBitGoTransferWebhookEvent,
+};

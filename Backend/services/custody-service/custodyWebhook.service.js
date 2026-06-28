@@ -59,6 +59,28 @@ const receiveBitGoWebhookEvent = async (payload) => {
     };
   }
 
+  if (payload.simulation === true) {
+    const event = await prisma.custodyWebhookEvent.create({
+      data: {
+        provider: CustodyProviderType.BITGO,
+        externalEventId,
+        eventType,
+        walletId,
+        transferId,
+        coin,
+        payload,
+        status: CustodyWebhookEventStatus.REJECTED,
+        errorMessage: "Simulated BitGo webhook ignored",
+      },
+    });
+
+    return {
+      event,
+      wasCreated: true,
+      shouldEnqueue: false,
+    };
+  }
+
   const event = await prisma.custodyWebhookEvent.create({
     data: {
       provider: CustodyProviderType.BITGO,
