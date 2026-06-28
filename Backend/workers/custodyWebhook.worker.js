@@ -7,9 +7,16 @@ import {
 import {
   finalizeBitGoDepositFromWebhookEvent,
   processBitGoTransferWebhookEvent,
+  recoverPendingBitGoDepositFinalizations,
 } from "../services/custody-service/custodyWebhookProcessor.service.js";
 
 const CUSTODY_WEBHOOK_QUEUE_NAME = "custody-webhook-processing";
+const DEPOSIT_FINALIZER_RECOVERY_INTERVAL_MS = Number(
+  process.env.DEPOSIT_FINALIZER_RECOVERY_INTERVAL_MS || 5 * 60 * 1000
+);
+const DEPOSIT_FINALIZER_RECOVERY_LIMIT = Number(
+  process.env.DEPOSIT_FINALIZER_RECOVERY_LIMIT || 100
+);
 
 let isShuttingDown = false;
 
@@ -82,6 +89,43 @@ custodyWebhookWorker.on("error", (error) => {
   console.error("Custody webhook worker error:", error);
 });
 
+const runDepositFinalizerRecovery = async ({ reason }) => {
+  try {
+    const result = await recoverPendingBitGoDepositFinalizations({
+      limit: DEPOSIT_FINALIZER_RECOVERY_LIMIT,
+    });
+
+    if (
+      result.scanned > 0 ||
+      result.scheduled > 0 ||
+      result.credited > 0 ||
+      result.errors.length > 0
+    ) {
+      console.log("Deposit finalizer recovery completed:", {
+        reason,
+        ...result,
+      });
+    }
+  } catch (error) {
+    console.error("Deposit finalizer recovery failed:", {
+      reason,
+      error: error.message,
+    });
+  }
+};
+
+runDepositFinalizerRecovery({
+  reason: "startup",
+});
+
+const depositFinalizerRecoveryInterval = setInterval(() => {
+  runDepositFinalizerRecovery({
+    reason: "interval",
+  });
+}, DEPOSIT_FINALIZER_RECOVERY_INTERVAL_MS);
+
+depositFinalizerRecoveryInterval.unref();
+
 const shutdown = async (signal) => {
   if (isShuttingDown) {
     return;
@@ -92,6 +136,8 @@ const shutdown = async (signal) => {
   console.log(`Received ${signal}. Closing custody webhook worker...`);
 
   try {
+    clearInterval(depositFinalizerRecoveryInterval);
+
     await custodyWebhookWorker.close();
 
     console.log("Custody webhook worker closed");

@@ -6,7 +6,10 @@ import {
 import { formatUnits } from "ethers";
 import prisma from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
-import { processDetectedDeposit } from "../wallet-ledger-service/deposit.service.js";
+import {
+  creditConfirmedDeposit,
+  processDetectedDeposit,
+} from "../wallet-ledger-service/deposit.service.js";
 import { getCustodyTransfer } from "./custodyProvider.service.js";
 import { finalizeSubmittedWithdrawal } from "../wallet-ledger-service/withdrawalProcessor.service.js";
 import { enqueueBitGoDepositFinalizationJob } from "../../jobs/custodyWebhookJob.service.js";
@@ -15,6 +18,8 @@ const BITGO_COIN_NETWORK_MAP = Object.freeze({
   hteth: "ETH_HOODI",
   tbtc: "BTC_TESTNET",
 });
+
+const BITGO_NETWORK_CODES = new Set(Object.values(BITGO_COIN_NETWORK_MAP));
 
 const NETWORK_NATIVE_ASSET_DECIMALS = Object.freeze({
   ETH_HOODI: 18,
@@ -44,6 +49,14 @@ const getNetworkCodeFromBitGoCoin = (coin) => {
   }
 
   return networkCode;
+};
+
+const getBitGoCoinsForNetworkCode = (networkCode) => {
+  return Object.entries(BITGO_COIN_NETWORK_MAP)
+    .filter(([, configuredNetworkCode]) => {
+      return configuredNetworkCode === networkCode;
+    })
+    .map(([coin]) => coin);
 };
 
 const parseBitGoIntegerAmount = (valueString) => {
@@ -510,8 +523,118 @@ const finalizeBitGoDepositFromWebhookEvent = async ({ eventId }) => {
   };
 };
 
+const recoverPendingBitGoDepositFinalizations = async ({
+  limit = 100,
+} = {}) => {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new AppError("Deposit recovery limit must be a positive integer", 400);
+  }
+
+  const deposits = await prisma.deposit.findMany({
+    where: {
+      status: {
+        in: [
+          DepositStatus.DETECTED,
+          DepositStatus.CONFIRMING,
+          DepositStatus.CONFIRMED,
+        ],
+      },
+    },
+    orderBy: {
+      detectedAt: "asc",
+    },
+    take: limit,
+    include: {
+      network: {
+        select: {
+          code: true,
+        },
+      },
+    },
+  });
+
+  const result = {
+    scanned: deposits.length,
+    credited: 0,
+    scheduled: 0,
+    skipped: 0,
+    missingWebhookEvent: 0,
+    errors: [],
+  };
+
+  for (const deposit of deposits) {
+    try {
+      if (deposit.status === DepositStatus.CONFIRMED) {
+        await creditConfirmedDeposit({
+          depositId: deposit.id,
+        });
+
+        result.credited += 1;
+        continue;
+      }
+
+      const networkCode = deposit.network.code;
+
+      if (!BITGO_NETWORK_CODES.has(networkCode)) {
+        result.skipped += 1;
+        continue;
+      }
+
+      const bitgoCoins = getBitGoCoinsForNetworkCode(networkCode);
+
+      const event = await prisma.custodyWebhookEvent.findFirst({
+        where: {
+          provider: CustodyProviderType.BITGO,
+          eventType: "transfer",
+          status: {
+            not: CustodyWebhookEventStatus.REJECTED,
+          },
+          coin: {
+            in: bitgoCoins,
+          },
+          transferId: {
+            not: null,
+          },
+          payload: {
+            path: ["hash"],
+            equals: deposit.txHash,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!event) {
+        result.missingWebhookEvent += 1;
+        continue;
+      }
+
+      await enqueueBitGoDepositFinalizationJob({
+        eventId: event.id,
+      });
+
+      result.scheduled += 1;
+    } catch (error) {
+      result.errors.push({
+        depositId: deposit.id,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Deposit recovery failed",
+      });
+    }
+  }
+
+  return result;
+};
+
 export {
   fetchTransferForBitGoWebhookEvent,
   finalizeBitGoDepositFromWebhookEvent,
   processBitGoTransferWebhookEvent,
+  recoverPendingBitGoDepositFinalizations,
 };
