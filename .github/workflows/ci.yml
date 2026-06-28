@@ -1,0 +1,112 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-backend:
+    name: Validate backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema prisma/auth/schema.prisma
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema prisma/auth/schema.prisma
+
+      - name: Check JavaScript syntax
+        run: |
+          find Backend -name "*.js" -not -path "Backend/uploads/*" -print0 \
+            | xargs -0 -n 1 node --check
+
+  deploy-production:
+    name: Deploy backend to production
+    runs-on: ubuntu-latest
+    needs: validate-backend
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/cryptoex_ec2
+          chmod 600 ~/.ssh/cryptoex_ec2
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        run: |
+          ssh -i ~/.ssh/cryptoex_ec2 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" <<'EOF'
+          set -euo pipefail
+
+          cd ~/CryptoBackend
+
+          git pull --ff-only origin main
+          npm ci
+
+          npx prisma migrate status --schema prisma/auth/schema.prisma
+          npx prisma migrate deploy --schema prisma/auth/schema.prisma
+          npx prisma generate --schema prisma/auth/schema.prisma
+
+          pm2 restart cryptoex-api
+          pm2 restart custody-webhooks-worker
+          pm2 restart withdrawals-worker
+          pm2 restart domain-events-worker
+          pm2 restart market-data-worker
+          pm2 restart market-projection-worker
+          pm2 restart trade-candles-worker
+          pm2 save
+          pm2 status
+
+          curl -fsS http://localhost:5050/market/overview > /dev/null
+          curl -fsS http://localhost:5050/trading/pairs > /dev/null
+          curl -fsS http://localhost:5050/blockchain/health > /dev/null
+          EOF
+
+      - name: Smoke test production API
+        run: |
+          curl -fsS https://api.cryptoex.me/market/overview > /dev/null
+          curl -fsS https://api.cryptoex.me/trading/pairs > /dev/null
+          curl -fsS https://api.cryptoex.me/blockchain/health > /dev/null
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Backend production deployment"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Prisma migration status checked"
+            echo "- Prisma migrations deployed"
+            echo "- PM2 processes restarted and saved"
+            echo "- Local EC2 smoke tests passed"
+            echo "- Public API smoke tests passed"
+          } >> "$GITHUB_STEP_SUMMARY"
