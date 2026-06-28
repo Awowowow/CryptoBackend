@@ -151,6 +151,19 @@ enum MarketCandleSource {
   REFERENCE_MARKET
 }
 
+enum FiatDepositProvider {
+  RAZORPAY
+}
+
+enum FiatDepositStatus {
+  CREATED
+  PAYMENT_CAPTURED
+  CREDITED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
 model Asset {
   id       String  @id @default(cuid())
   symbol   String  @unique @db.VarChar(20)
@@ -173,10 +186,11 @@ model Asset {
   quoteTradeOrders  TradeOrder[] @relation("TradeOrderQuoteAsset")
   lockedTradeOrders TradeOrder[] @relation("TradeOrderLockedAsset")
 
-  baseTrades      Trade[] @relation("TradeBaseAsset")
-  quoteTrades     Trade[] @relation("TradeQuoteAsset")
-  buyerFeeTrades  Trade[] @relation("TradeBuyerFeeAsset")
-  sellerFeeTrades Trade[] @relation("TradeSellerFeeAsset")
+  baseTrades      Trade[]       @relation("TradeBaseAsset")
+  quoteTrades     Trade[]       @relation("TradeQuoteAsset")
+  buyerFeeTrades  Trade[]       @relation("TradeBuyerFeeAsset")
+  sellerFeeTrades Trade[]       @relation("TradeSellerFeeAsset")
+  fiatDeposits    FiatDeposit[] @relation("FiatDepositCreditedAsset")
 }
 
 model BlockchainNetwork {
@@ -315,6 +329,47 @@ model Deposit {
   @@index([status])
 }
 
+model FiatDeposit {
+  id String @id @default(cuid())
+
+  userId          String
+  creditedAssetId String
+
+  provider FiatDepositProvider
+  status   FiatDepositStatus   @default(CREATED)
+
+  providerOrderId   String  @unique @db.VarChar(255)
+  providerPaymentId String? @unique @db.VarChar(255)
+  providerSignature String? @db.Text
+
+  fiatCurrency    String  @default("INR") @db.VarChar(10)
+  fiatAmountMinor BigInt
+  fiatAmount      Decimal @db.Decimal(18, 2)
+
+  creditedAmount Decimal @db.Decimal(36, 18)
+  exchangeRate   Decimal @db.Decimal(36, 18)
+
+  failureReason String? @db.Text
+  metadata      Json?
+
+  paidAt     DateTime?
+  creditedAt DateTime?
+  failedAt   DateTime?
+  expiresAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditedAsset Asset @relation("FiatDepositCreditedAsset", fields: [creditedAssetId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@index([provider, status])
+  @@index([creditedAssetId])
+  @@index([providerPaymentId])
+  @@index([createdAt])
+}
+
 model User {
   id           String @id @default(cuid())
   email        String @unique @db.VarChar(255)
@@ -344,6 +399,7 @@ model User {
   walletAccounts         WalletAccount[]
   depositAddresses       DepositAddress[]
   deposits               Deposit[]
+  fiatDeposits           FiatDeposit[]
   reviewedKycSubmissions KycSubmission[]      @relation("KycReviewedBy")
   kycAuditLogs           KycAuditLog[]        @relation("KycAuditActor")
   withdrawalAddresses    WithdrawalAddress[]
