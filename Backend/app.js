@@ -16,6 +16,7 @@ import marketRouter from './router/market.js';
 import blockchainRouter from './router/blockchain.js';
 import webhookRouter from './router/webhook.js';
 import tradingRouter from './router/trading.js';
+import paymentRouter from './router/payment.js';
 
 app.use(cookieParser());
 app.use(
@@ -47,6 +48,7 @@ app.use("/market", marketRouter)
 app.use("/blockchain", blockchainRouter)
 app.use("/webhooks", webhookRouter)
 app.use("/trading", tradingRouter);
+app.use("/payments", paymentRouter);
 
 app.use((_req, _res, next) => {
     next(new AppError('Route not found', 404));

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import Razorpay from "razorpay";
-import AppError from "../../utils/AppError";
+import AppError from "../../utils/AppError.js";
 
 const getRazorpayClient = () =>{
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -16,7 +16,12 @@ const getRazorpayClient = () =>{
     });
 };
 
-const createRazorpayOrder = async (amountMinor, currency = "INR", receipt , notes = {}) =>{
+const createRazorpayOrder = async ({
+    amountMinor,
+    currency = "INR",
+    receipt,
+    notes = {},
+  }) => {
     if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
         throw new AppError("Payment amount must be a positive integer", 400);
       }
